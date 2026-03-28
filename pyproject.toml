@@ -14,6 +14,10 @@ doc-flow = "doc_flow.cli:main"
 [tool.uv]
 package = true
 
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
