@@ -1,38 +1,57 @@
 ---
 name: openspec
-description: OpenSpec-style change workflow with markstate. Agree on proposal and design before implementation.
+description: OpenSpec-style change workflow with markstate. Agree on proposal, design, and delta specs before implementation.
 ---
 
-Lightweight change workflow using markstate.
-Each change lives in its own subdirectory under `changes/`, sharing one `flow.yml`.
+Lightweight OpenSpec-style change workflow using markstate.
 Three phases: **speccing → implementing → done**.
+
+```
+openspec/
+  specs/              ← source of truth (domain specs, managed separately)
+  changes/
+    flow.yml          ← shared flow definition
+    add-dark-mode/
+      proposal.md     ← why and what
+      design.md       ← technical approach
+      specs/          ← delta specs (what changes in the source of truth)
+        ui/spec.md
+      tasks.md        ← implementation checklist (auto-created)
+```
 
 **When in doubt:** run `markstate status` to see the current phase and file states, then `markstate next` to see what transitions are available.
 
 **Setup (once per project)**
 
 ```
-mkdir changes
-cp <markstate-examples>/openspec/flow.yml changes/flow.yml
+mkdir -p openspec/changes
+cp <markstate-examples>/openspec/flow.yml openspec/changes/flow.yml
 ```
 
 **Starting a new change**
 
 ```
-mkdir changes/add-dark-mode
-markstate focus changes/add-dark-mode
+mkdir openspec/changes/add-dark-mode
+markstate focus openspec/changes/add-dark-mode
 markstate new proposal.md
 markstate new design.md
 ```
 
 **Phase 1 — Speccing**
 
-Write both documents before accepting either. The goal is to agree on what and how before any code is written.
+Write `proposal.md` and `design.md` before accepting either.
 
-- `proposal.md` — what we're building and why; what's out of scope
-- `design.md` — technical approach; affected files, modules, or APIs
+- `proposal.md` — intent, scope, and out-of-scope
+- `design.md` — technical approach and affected areas
+- `specs/<domain>/spec.md` — delta specs describing what changes in the source of truth (ADDED/MODIFIED/REMOVED requirements). Create as needed:
 
-When both are ready:
+  ```
+  markstate new specs/auth
+  ```
+
+  Delta specs are optional for small changes. When present, accept them too before advancing.
+
+When ready to implement:
 
 ```
 markstate do accept proposal.md
@@ -51,11 +70,11 @@ Fill `tasks.md` with high-level work units — one checkbox per major concern:
 - [ ] Wire up localStorage persistence
 ```
 
-Read `tasks.md` and `design.md`. For each unchecked item, **enter plan mode**, implement it, then mark it done (`- [ ]` → `- [x]`). Repeat until all items are checked.
+Read `tasks.md`, `design.md`, and any delta specs in `specs/`. For each unchecked item, **enter plan mode**, implement it, then mark it done (`- [ ]` → `- [x]`). Repeat until all items are checked.
 
 **Phase 3 — Done**
 
-When all tasks are checked, the change is complete.
+When all tasks are checked, archive the change and merge delta specs into the source of truth under `openspec/specs/`.
 
 **Reopening**
 
@@ -69,3 +88,4 @@ markstate do reopen design.md
 - Do NOT write code before both `proposal.md` and `design.md` are accepted
 - Do NOT use `markstate set` to skip the acceptance gate
 - Keep tasks high-level — plan sub-steps in plan mode, not as extra checkboxes
+- When writing delta specs, use ADDED/MODIFIED/REMOVED sections — describe behavior, not implementation

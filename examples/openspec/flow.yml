@@ -1,5 +1,17 @@
 # OpenSpec-style flow. Place this at changes/flow.yml.
 # Use `markstate focus changes/add-dark-mode` to work on a specific change.
+#
+# Directory layout:
+#   openspec/
+#     specs/              ← source of truth (managed separately)
+#     changes/
+#       flow.yml          ← this file
+#       add-dark-mode/
+#         proposal.md
+#         design.md
+#         specs/          ← delta specs (ADDED/MODIFIED/REMOVED requirements)
+#           ui/spec.md
+#         tasks.md
 
 phases:
   - name: speccing
@@ -12,13 +24,14 @@ phases:
 
           # Proposal
 
-          ## What and why
+          ## Intent
 
           <!-- What are we building and why does it matter? -->
 
-          ## Out of scope
+          ## Scope
 
-          <!-- What are we explicitly not doing? -->
+          <!-- In scope: -->
+          <!-- Out of scope: -->
       - file: design.md
         template: |
           ---
@@ -34,6 +47,24 @@ phases:
           ## Affected areas
 
           <!-- Files, modules, APIs, or systems that will change. -->
+      - dir: specs/*
+        files:
+          - file: spec.md
+            template: |
+              ---
+              status: draft
+              ---
+
+              # Delta Spec
+
+              ## ADDED Requirements
+
+              <!-- ### Requirement: ...
+              #### Scenario: ... -->
+
+              ## MODIFIED Requirements
+
+              ## REMOVED Requirements
     advance_when:
       - file: proposal.md
         status: accepted
