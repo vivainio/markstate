@@ -40,6 +40,13 @@ def _parse_set_args(set_args: list[str]) -> dict[str, str]:
     return result
 
 
+def _add_set_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--set", metavar="KEY=VALUE", action="append", default=[],
+        help="Set extra frontmatter fields ('me' = git user, 'now' = UTC timestamp)",
+    )
+
+
 def _apply_extra_fields(path: Path, fields: dict[str, str]) -> None:
     if not fields:
         return
@@ -486,20 +493,20 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("file", metavar=_new_metavar(config))
     p.add_argument("directory", nargs="?", default=None)
     p.add_argument("--force", action="store_true", help="Overwrite existing file")
-    p.add_argument("--set", metavar="KEY=VALUE", action="append", default=[], help="Set extra frontmatter fields (use 'me' for git user, 'now' for timestamp)")
+    _add_set_arg(p)
 
     # set
     p = sub.add_parser("set", help="Set the status of one or more documents directly.")
     p.add_argument("status", metavar="STATUS")
     p.add_argument("targets", metavar="FILE", nargs="+")
-    p.add_argument("--set", metavar="KEY=VALUE", action="append", default=[], help="Set extra frontmatter fields (use 'me' for git user, 'now' for timestamp)")
+    _add_set_arg(p)
 
     # do
     transition_metavar = "[" + "|".join(transition_names) + "]" if transition_names else "TRANSITION"
     p = sub.add_parser("do", help="Apply a named transition to a document.")
     p.add_argument("transition_name", metavar=transition_metavar)
     p.add_argument("target", metavar="FILE")
-    p.add_argument("--set", metavar="KEY=VALUE", action="append", default=[], help="Set extra frontmatter fields (use 'me' for git user, 'now' for timestamp)")
+    _add_set_arg(p)
 
     # focus
     p = sub.add_parser("focus", help="Set or show the current task directory.")
@@ -531,7 +538,7 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p = sub.add_parser("check", help="Check off a task by substring match.")
     p.add_argument("substring", metavar="TEXT")
     p.add_argument("directory", nargs="?", default=None)
-    p.add_argument("--set", metavar="KEY=VALUE", action="append", default=[], help="Set extra frontmatter fields (use 'me' for git user, 'now' for timestamp)")
+    _add_set_arg(p)
 
     return parser
 
