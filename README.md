@@ -4,6 +4,17 @@ Generic document flow processor for state tracking in markdown front matter.
 
 Define a workflow in `flow.yml` — phases, gate conditions, and transitions — then use `markstate` to track and advance documents through the flow.
 
+## Examples
+
+Ready-made flows and agent skills are in [`examples/`](examples/) and [`skills/`](skills/):
+
+| Example | Description |
+|---|---|
+| [`examples/sdd/`](examples/sdd/) | Spec-driven development: proposal → spec → tasks → done |
+| [`examples/openspec/`](examples/openspec/) | [OpenSpec](https://github.com/Fission-AI/OpenSpec)-style: proposal + design agreed upfront, then tasks |
+
+Each example includes a `flow.yml` to place at the root of your change collection (e.g. `specs/flow.yml`) and a matching skill in `skills/` to guide an AI agent through the workflow.
+
 ## Install
 
 ```bash
