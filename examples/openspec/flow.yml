@@ -1,0 +1,73 @@
+# OpenSpec-style flow. Place this at changes/flow.yml.
+# Use `markstate focus changes/add-dark-mode` to work on a specific change.
+
+phases:
+  - name: speccing
+    produces:
+      - file: proposal.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Proposal
+
+          ## What and why
+
+          <!-- What are we building and why does it matter? -->
+
+          ## Out of scope
+
+          <!-- What are we explicitly not doing? -->
+      - file: design.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Design
+
+          ## Approach
+
+          <!-- How will this be built? Key decisions and trade-offs. -->
+
+          ## Affected areas
+
+          <!-- Files, modules, APIs, or systems that will change. -->
+    advance_when:
+      - file: proposal.md
+        status: accepted
+      - file: design.md
+        status: accepted
+
+  - name: implementing
+    gates:
+      - file: proposal.md
+        status: accepted
+      - file: design.md
+        status: accepted
+    produces:
+      - file: tasks.md
+        template: |
+          # Tasks
+
+          <!-- High-level work units. Claude plans sub-steps in plan mode. -->
+
+          - [ ]
+        auto: true
+    advance_when:
+      - file: tasks.md
+        tasks: all_done
+
+  - name: done
+    gates:
+      - file: tasks.md
+        tasks: all_done
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+  - name: reopen
+    from: accepted
+    to: draft

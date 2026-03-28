@@ -1,0 +1,84 @@
+# Minimal spec-driven development flow. Place this at specs/flow.yml.
+# Use `markstate focus specs/PROJ-123.add-auth` to work on a specific spec.
+
+phases:
+  - name: drafting
+    produces:
+      - file: proposal.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Proposal
+
+          ## Problem
+
+          <!-- What is broken or missing? -->
+
+          ## Solution
+
+          <!-- How will you fix it? -->
+    advance_when:
+      - file: proposal.md
+        status: accepted
+
+  - name: speccing
+    gates:
+      - file: proposal.md
+        status: accepted
+    produces:
+      - file: spec.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Specification
+
+          ## Functional requirements
+
+          <!-- What must the solution do? -->
+
+          ## Technical design
+
+          <!-- How will it be built? -->
+        auto: true
+    advance_when:
+      - file: spec.md
+        status: accepted
+
+  - name: implementing
+    gates:
+      - file: spec.md
+        status: accepted
+    produces:
+      - file: tasks.md
+        template: |
+          # Tasks
+
+          <!-- Each item is a high-level work unit, not a step-by-step procedure.
+               Claude will plan the implementation details in plan mode.
+               Examples:
+                 - [ ] Add authentication middleware
+                 - [ ] Write integration tests for login flow
+                 - [ ] Update API docs -->
+
+          - [ ]
+        auto: true
+    advance_when:
+      - file: tasks.md
+        tasks: all_done
+
+  - name: done
+    gates:
+      - file: tasks.md
+        tasks: all_done
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+  - name: reopen
+    from: accepted
+    to: draft
