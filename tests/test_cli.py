@@ -35,7 +35,7 @@ phases:
       - file: spec.md
         status: approved
 
-moves:
+transitions:
   - name: approve
     from: draft
     to: approved
@@ -66,7 +66,7 @@ phases:
         template: "# Summary\\n"
         auto: true
 
-moves: []
+transitions: []
 """
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from markstate import engine, frontmatter
 from markstate.config import FlowConfig, Phase, ProducedDir, ProducedDoc, find_and_load
-from markstate.engine import MoveError, TaskNotFoundError
+from markstate.engine import TaskNotFoundError, TransitionError
 
 
 FOCUS_FILE = ".markstate-focus"
@@ -110,7 +110,7 @@ phases:
       - glob: "docs/*.md"
         all_status: reviewed
 
-moves:
+transitions:
   - name: approve
     from: draft
     to: approved
@@ -239,9 +239,9 @@ def _cmd_do(args: argparse.Namespace) -> None:
     phase_before = engine.current_phase(config, directory)
 
     try:
-        old, new = engine.do_move(args.move_name, target, config)
+        old, new = engine.do_transition(args.transition_name, target, config)
         print(f"{args.target}: {old} → {new}")
-    except MoveError as e:
+    except TransitionError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -340,30 +340,30 @@ def _cmd_check_gate(args: argparse.Namespace) -> None:
         print("gate satisfied")
 
 
-def _cmd_moves(args: argparse.Namespace) -> None:
+def _cmd_transitions(args: argparse.Namespace) -> None:
     config = _load_config()
-    for move in config.moves:
-        print(f"  {move.name:20s}  {move.from_state} → {move.to_state}")
+    for t in config.transitions:
+        print(f"  {t.name:20s}  {t.from_state} → {t.to_state}")
 
 
 def _cmd_next(args: argparse.Namespace) -> None:
     config = _load_config()
-    results = engine.next_moves(config, _resolve_directory(args, config))
+    results = engine.next_transitions(config, _resolve_directory(args, config))
     if args.as_json:
         print(json.dumps(results, indent=2))
     else:
         if not results:
             print("nothing to do")
             return
-        move_map = {m.name: m.to_state for m in config.moves}
+        transition_map = {t.name: t.to_state for t in config.transitions}
         for item in results:
             if item["missing"]:
                 print(f"  {item['file']:30s}  (not created)    → markstate new {item['file']}")
             else:
-                moves = ", ".join(
-                    f"{m} (→ {move_map[m]})" for m in item["moves"]
+                transitions = ", ".join(
+                    f"{t} (→ {transition_map[t]})" for t in item["transitions"]
                 )
-                print(f"  {item['file']:30s}  {item['status']:15s}  → {moves}")
+                print(f"  {item['file']:30s}  {item['status']:15s}  → {transitions}")
 
 
 def _cmd_next_task(args: argparse.Namespace) -> None:
@@ -418,7 +418,7 @@ def _new_metavar(config: FlowConfig | None) -> str:
 
 
 def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
-    move_names = config.move_names() if config else []
+    transition_names = config.transition_names() if config else []
 
     parser = argparse.ArgumentParser(
         prog="markstate",
@@ -446,16 +446,16 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("targets", metavar="FILE", nargs="+")
 
     # do
-    move_metavar = "[" + "|".join(move_names) + "]" if move_names else "MOVE"
-    p = sub.add_parser("do", help="Apply a named move to a document.")
-    p.add_argument("move_name", metavar=move_metavar)
+    transition_metavar = "[" + "|".join(transition_names) + "]" if transition_names else "TRANSITION"
+    p = sub.add_parser("do", help="Apply a named transition to a document.")
+    p.add_argument("transition_name", metavar=transition_metavar)
     p.add_argument("target", metavar="FILE")
 
-    # status
     # focus
     p = sub.add_parser("focus", help="Set or show the current task directory.")
     p.add_argument("directory", nargs="?", default=None)
 
+    # status
     p = sub.add_parser("status", help="Show current phase and phase completion status.")
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
     p.add_argument("directory", nargs="?", default=None)
@@ -465,11 +465,11 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("phase_name", metavar="PHASE")
     p.add_argument("directory", nargs="?", default=None)
 
-    # moves
-    sub.add_parser("moves", help="List all available moves.")
+    # transitions
+    sub.add_parser("transitions", help="List all available transitions.")
 
     # next
-    p = sub.add_parser("next", help="Show which moves can be applied to documents.")
+    p = sub.add_parser("next", help="Show which transitions can be applied to documents.")
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
     p.add_argument("directory", nargs="?", default=None)
 
@@ -502,7 +502,7 @@ def main() -> None:
         "do": _cmd_do,
         "status": _cmd_status,
         "check-gate": _cmd_check_gate,
-        "moves": _cmd_moves,
+        "transitions": _cmd_transitions,
         "next": _cmd_next,
         "next-task": _cmd_next_task,
         "check": _cmd_check,

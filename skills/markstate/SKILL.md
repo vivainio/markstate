@@ -1,6 +1,6 @@
 ---
 name: markstate
-description: Use the markstate CLI to navigate focus, check document status, apply moves, and work through checkbox tasks in a flow.yml-defined workflow.
+description: Use the markstate CLI to navigate focus, check document status, apply transitions, and work through checkbox tasks in a flow.yml-defined workflow.
 ---
 
 Use the markstate CLI to work through a document workflow defined in `flow.yml`.
@@ -14,30 +14,30 @@ and transitions based on those statuses and checkbox task completion.
   for a directory whose name contains it as a substring. Errors if ambiguous.
 - `markstate status [DIR]` — show current phase, document statuses, and task
   counts. Add `--json` for machine-readable output.
-- `markstate next [DIR]` — list applicable moves on existing documents and
+- `markstate next [DIR]` — list applicable transitions on existing documents and
   documents that still need to be created.
 - `markstate next-task [DIR]` — show the first unchecked `- [ ]` task. When
   all tasks are done, reports the current phase and auto-creates any `auto: true`
   documents for the entered phase.
-- `markstate do MOVE FILE` — apply a named move to a document. Reports the
-  status change and any phase transition.
+- `markstate do TRANSITION FILE` — apply a named transition to a document. Reports
+  the status change and any phase change.
 - `markstate check TEXT [DIR]` — check off the first unchecked task whose text
   contains TEXT (case-insensitive). Reports `(N/M)` progress and fires a phase
   transition if it was the last task.
-- `markstate set STATUS FILE...` — set status directly without a defined move.
+- `markstate set STATUS FILE...` — set status directly without a defined transition.
   Works without `flow.yml`.
 - `markstate new FILE [DIR]` — create a document from its template defined in
   `flow.yml`.
 - `markstate check-gate PHASE [DIR]` — verify a phase's gate conditions.
   Exits 0 if satisfied, 1 otherwise.
-- `markstate moves` — list all defined moves.
+- `markstate transitions` — list all defined transitions.
 
 **Typical flow**
 
 1. Set focus: `markstate focus PROJ-123`
 2. Check status: `markstate status`
 3. See what's next: `markstate next`
-4. Apply a move: `markstate do approve spec.md`
+4. Apply a transition: `markstate do approve spec.md`
 5. For task-driven phases, repeat:
    - `markstate next-task` — get the next task
    - Implement it
@@ -48,7 +48,7 @@ afterward — it detects completion and fires any pending transition.
 
 **Phase transitions**
 
-When a move or task completion causes a phase change, markstate prints:
+When a transition or task completion causes a phase change, markstate prints:
 
 ```
 → entering phase: <name>

@@ -2,7 +2,7 @@
 
 Generic document flow processor for state tracking in markdown front matter.
 
-Define a workflow in `flow.yml` — phases, gate conditions, and moves — then use `markstate` to track and advance documents through the flow.
+Define a workflow in `flow.yml` — phases, gate conditions, and transitions — then use `markstate` to track and advance documents through the flow.
 
 ## Install
 
@@ -54,7 +54,7 @@ markstate set done docs/*.md
 
 ### `do`
 
-Apply a named move to a document. Validates the current status before applying:
+Apply a named transition to a document. Validates the current status before applying:
 
 ```
 $ markstate do approve spec.md
@@ -64,7 +64,7 @@ spec.md: draft → approved
     - all files matching 'specs/*/tasks.md' must have status 'done'
 ```
 
-When a move causes a phase transition, the new phase and its completion conditions are printed. Files marked `auto: true` in the new phase's `produces` are created automatically.
+When a transition causes a phase change, the new phase and its completion conditions are printed. Files marked `auto: true` in the new phase's `produces` are created automatically.
 
 ### `status`
 
@@ -86,7 +86,7 @@ Takes an optional directory argument. Add `--json` for machine-readable output.
 
 ### `next`
 
-Show what can be done next — applicable moves on existing documents, and files that still need to be created:
+Show what can be done next — applicable transitions on existing documents, and files that still need to be created:
 
 ```
 $ markstate next
@@ -106,12 +106,12 @@ markstate next                            # operates on the focused directory
 
 Focus is stored in `.markstate-focus` at the project root. Add it to `.gitignore` as it is personal state.
 
-### `moves`
+### `transitions`
 
-List all defined moves:
+List all defined transitions:
 
 ```
-$ markstate moves
+$ markstate transitions
   approve               draft → approved
   start-review          draft → in-review
   mark-reviewed         in-review → reviewed
@@ -136,7 +136,7 @@ gate not satisfied:
 | `status_field` | Front matter key to track state (default: `status`) |
 | `docs_root` | Directory where documents live, relative to `flow.yml` or absolute (default: same directory as `flow.yml`) |
 | `phases` | Ordered list of phases |
-| `moves` | Named transitions between states |
+| `transitions` | Named transitions between states |
 
 `docs_root` allows `flow.yml` to live in a separate location — even a different repository — from the documents it manages:
 
@@ -199,13 +199,13 @@ produces:
 | `file` + `status` | A specific file must have the given status |
 | `glob` + `all_status` | All files matching the glob must have the given status |
 
-**Move fields:**
+**Transition fields:**
 
 | Field | Description |
 |---|---|
-| `name` | Move name (used with `markstate do`) |
+| `name` | Transition name (used with `markstate do`) |
 | `from` | Required current status |
-| `to` | New status after applying the move |
+| `to` | New status after applying the transition |
 
 ## Minimal flow without config
 

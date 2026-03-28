@@ -6,7 +6,7 @@ from pathlib import Path
 from markstate.config import (
     Condition,
     FlowConfig,
-    Move,
+    Transition,
     Phase,
     ProducedDir,
     ProducedDoc,
@@ -14,13 +14,13 @@ from markstate.config import (
 from markstate import engine
 
 
-def make_config(tmp_path, phases, moves=None, docs_root=None):
+def make_config(tmp_path, phases, transitions=None, docs_root=None):
     return FlowConfig(
         root=tmp_path,
         docs_root=docs_root or tmp_path,
         status_field="status",
         phases=phases,
-        moves=moves or [],
+        transitions=transitions or [],
     )
 
 
@@ -95,9 +95,9 @@ def test_check_gate_unmet(tmp_path):
 
 
 def test_do_move_success(tmp_path):
-    cfg = make_config(tmp_path, [], moves=[Move("approve", "draft", "approved")])
+    cfg = make_config(tmp_path, [], transitions=[Transition("approve", "draft", "approved")])
     write_md(tmp_path / "spec.md", status="draft")
-    old, new = engine.do_move("approve", tmp_path / "spec.md", cfg)
+    old, new = engine.do_transition("approve", tmp_path / "spec.md", cfg)
     assert old == "draft"
     assert new == "approved"
     from markstate import frontmatter
@@ -105,17 +105,17 @@ def test_do_move_success(tmp_path):
 
 
 def test_do_move_wrong_state(tmp_path):
-    cfg = make_config(tmp_path, [], moves=[Move("approve", "draft", "approved")])
+    cfg = make_config(tmp_path, [], transitions=[Transition("approve", "draft", "approved")])
     write_md(tmp_path / "spec.md", status="approved")
-    with pytest.raises(engine.MoveError, match="expected status 'draft'"):
-        engine.do_move("approve", tmp_path / "spec.md", cfg)
+    with pytest.raises(engine.TransitionError, match="expected status 'draft'"):
+        engine.do_transition("approve", tmp_path / "spec.md", cfg)
 
 
 def test_do_move_unknown(tmp_path):
-    cfg = make_config(tmp_path, [], moves=[Move("approve", "draft", "approved")])
+    cfg = make_config(tmp_path, [], transitions=[Transition("approve", "draft", "approved")])
     write_md(tmp_path / "spec.md", status="draft")
-    with pytest.raises(engine.MoveError, match="unknown move"):
-        engine.do_move("nonexistent", tmp_path / "spec.md", cfg)
+    with pytest.raises(engine.TransitionError, match="unknown transition"):
+        engine.do_transition("nonexistent", tmp_path / "spec.md", cfg)
 
 
 # --- _evaluate: glob + all_status ---

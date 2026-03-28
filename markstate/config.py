@@ -10,7 +10,7 @@ CONFIG_FILENAME = "flow.yml"
 
 
 @dataclass
-class Move:
+class Transition:
     name: str
     from_state: str
     to_state: str
@@ -52,16 +52,16 @@ class FlowConfig:
     docs_root: Path
     status_field: str
     phases: list[Phase]
-    moves: list[Move]
+    transitions: list[Transition]
 
-    def move(self, name: str) -> Move | None:
-        return next((m for m in self.moves if m.name == name), None)
+    def transition(self, name: str) -> Transition | None:
+        return next((t for t in self.transitions if t.name == name), None)
 
     def phase(self, name: str) -> Phase | None:
         return next((p for p in self.phases if p.name == name), None)
 
-    def move_names(self) -> list[str]:
-        return [m.name for m in self.moves]
+    def transition_names(self) -> list[str]:
+        return [t.name for t in self.transitions]
 
 
 def find_and_load(start: Path | None = None) -> FlowConfig:
@@ -84,7 +84,7 @@ def _load(path: Path) -> FlowConfig:
     raw = yaml.safe_load(path.read_text())
 
     phases = [_parse_phase(p) for p in raw.get("phases", [])]
-    moves = [_parse_move(m) for m in raw.get("moves", [])]
+    transitions = [_parse_transition(t) for t in raw.get("transitions", [])]
 
     config_dir = path.parent
     docs_root_raw = raw.get("docs_root")
@@ -98,7 +98,7 @@ def _load(path: Path) -> FlowConfig:
         docs_root=docs_root,
         status_field=raw.get("status_field", "status"),
         phases=phases,
-        moves=moves,
+        transitions=transitions,
     )
 
 
@@ -130,8 +130,8 @@ def _parse_produced_dir(raw: dict) -> ProducedDir:
     )
 
 
-def _parse_move(raw: dict) -> Move:
-    return Move(
+def _parse_transition(raw: dict) -> Transition:
+    return Transition(
         name=raw["name"],
         from_state=raw["from"],
         to_state=raw["to"],

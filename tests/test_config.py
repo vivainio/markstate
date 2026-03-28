@@ -14,17 +14,17 @@ def write_flow(tmp_path: Path, content: str) -> Path:
 
 
 def test_load_minimal(tmp_path):
-    write_flow(tmp_path, "phases: []\nmoves: []\n")
+    write_flow(tmp_path, "phases: []\ntransitions: []\n")
     cfg = find_and_load(tmp_path)
     assert cfg.status_field == "status"
     assert cfg.root == tmp_path
     assert cfg.docs_root == tmp_path
     assert cfg.phases == []
-    assert cfg.moves == []
+    assert cfg.transitions == []
 
 
 def test_docs_root_defaults_to_config_dir(tmp_path):
-    write_flow(tmp_path, "phases: []\nmoves: []\n")
+    write_flow(tmp_path, "phases: []\ntransitions: []\n")
     cfg = find_and_load(tmp_path)
     assert cfg.docs_root == tmp_path
 
@@ -32,7 +32,7 @@ def test_docs_root_defaults_to_config_dir(tmp_path):
 def test_docs_root_relative(tmp_path):
     docs = tmp_path / "docs"
     docs.mkdir()
-    write_flow(tmp_path, "docs_root: docs\nphases: []\nmoves: []\n")
+    write_flow(tmp_path, "docs_root: docs\nphases: []\ntransitions: []\n")
     cfg = find_and_load(tmp_path)
     assert cfg.docs_root == docs
 
@@ -40,13 +40,13 @@ def test_docs_root_relative(tmp_path):
 def test_docs_root_absolute(tmp_path):
     docs = tmp_path / "elsewhere"
     docs.mkdir()
-    write_flow(tmp_path, f"docs_root: {docs}\nphases: []\nmoves: []\n")
+    write_flow(tmp_path, f"docs_root: {docs}\nphases: []\ntransitions: []\n")
     cfg = find_and_load(tmp_path)
     assert cfg.docs_root == docs
 
 
 def test_find_walks_up(tmp_path):
-    write_flow(tmp_path, "phases: []\nmoves: []\n")
+    write_flow(tmp_path, "phases: []\ntransitions: []\n")
     subdir = tmp_path / "a" / "b"
     subdir.mkdir(parents=True)
     cfg = find_and_load(subdir)
@@ -59,7 +59,7 @@ def test_find_not_found(tmp_path):
 
 
 def test_status_field_custom(tmp_path):
-    write_flow(tmp_path, "status_field: state\nphases: []\nmoves: []\n")
+    write_flow(tmp_path, "status_field: state\nphases: []\ntransitions: []\n")
     cfg = find_and_load(tmp_path)
     assert cfg.status_field == "state"
 
@@ -75,7 +75,7 @@ phases:
     gates:
       - file: spec.md
         status: approved
-moves: []
+transitions: []
 """)
     cfg = find_and_load(tmp_path)
     drafting = cfg.phase("drafting")
@@ -95,7 +95,7 @@ phases:
     advance_when:
       - glob: "docs/*.md"
         all_status: reviewed
-moves: []
+transitions: []
 """)
     cfg = find_and_load(tmp_path)
     cond = cfg.phases[0].advance_when[0]
@@ -110,7 +110,7 @@ phases:
     advance_when:
       - file: tasks.md
         tasks: all_done
-moves: []
+transitions: []
 """)
     cfg = find_and_load(tmp_path)
     cond = cfg.phases[0].advance_when[0]
@@ -118,10 +118,10 @@ moves: []
     assert cond.tasks == "all_done"
 
 
-def test_parse_moves(tmp_path):
+def test_parse_transitions(tmp_path):
     write_flow(tmp_path, """
 phases: []
-moves:
+transitions:
   - name: approve
     from: draft
     to: approved
@@ -130,8 +130,8 @@ moves:
     to: rejected
 """)
     cfg = find_and_load(tmp_path)
-    assert cfg.move_names() == ["approve", "reject"]
-    approve = cfg.move("approve")
+    assert cfg.transition_names() == ["approve", "reject"]
+    approve = cfg.transition("approve")
     assert approve.from_state == "draft"
     assert approve.to_state == "approved"
 
@@ -144,7 +144,7 @@ phases:
       - file: spec.md
         template: "---\\nstatus: draft\\n---\\n"
         auto: true
-moves: []
+transitions: []
 """)
     cfg = find_and_load(tmp_path)
     doc = cfg.phases[0].produces[0]
@@ -162,7 +162,7 @@ phases:
         files:
           - file: functional-spec.md
           - file: technical-spec.md
-moves: []
+transitions: []
 """)
     from markstate.config import ProducedDir
     cfg = find_and_load(tmp_path)

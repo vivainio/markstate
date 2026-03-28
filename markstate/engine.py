@@ -1,12 +1,12 @@
-"""State engine: evaluate conditions and execute moves."""
+"""State engine: evaluate conditions and execute transitions."""
 
 from pathlib import Path
 
 from markstate import frontmatter
-from markstate.config import Condition, FlowConfig, Move, Phase, ProducedDir, ProducedDoc
+from markstate.config import Condition, FlowConfig, Phase, ProducedDir, ProducedDoc, Transition
 
 
-class MoveError(Exception):
+class TransitionError(Exception):
     pass
 
 
@@ -29,24 +29,26 @@ def check_gate(phase: Phase, config: FlowConfig, directory: Path) -> list[str]:
     return [describe_condition(c) for c in phase.gates if not _evaluate(c, config, directory)]
 
 
-def do_move(move_name: str, target: Path, config: FlowConfig) -> tuple[str, str]:
-    """Execute a named move on target file. Returns (old_status, new_status)."""
-    move = config.move(move_name)
-    if move is None:
-        raise MoveError(f"unknown move '{move_name}'. Available: {config.move_names()}")
+def do_transition(transition_name: str, target: Path, config: FlowConfig) -> tuple[str, str]:
+    """Execute a named transition on target file. Returns (old_status, new_status)."""
+    t = config.transition(transition_name)
+    if t is None:
+        raise TransitionError(
+            f"unknown transition '{transition_name}'. Available: {config.transition_names()}"
+        )
 
     doc = frontmatter.load(target)
     current = str(doc.get(config.status_field) or "")
 
-    if current != move.from_state:
-        raise MoveError(
-            f"cannot apply move '{move_name}' to '{target.name}': "
-            f"expected status '{move.from_state}', got '{current}'"
+    if current != t.from_state:
+        raise TransitionError(
+            f"cannot apply transition '{transition_name}' to '{target.name}': "
+            f"expected status '{t.from_state}', got '{current}'"
         )
 
-    doc.set(config.status_field, move.to_state)
+    doc.set(config.status_field, t.to_state)
     doc.save()
-    return current, move.to_state
+    return current, t.to_state
 
 
 def find_dir_template(config: FlowConfig, cwd: Path) -> tuple[Path, ProducedDir] | tuple[None, None]:
@@ -65,8 +67,8 @@ def find_dir_template(config: FlowConfig, cwd: Path) -> tuple[Path, ProducedDir]
     return None, None
 
 
-def next_moves(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
-    """Return actionable next steps: applicable moves on existing docs, and missing produced docs."""
+def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
+    """Return actionable next steps: applicable transitions on existing docs, and missing produced docs."""
     results = []
 
     for path in sorted(directory.rglob("*.md")):
@@ -74,12 +76,12 @@ def next_moves(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
         current = str(doc.get(config.status_field) or "")
         if not current:
             continue
-        applicable = [m.name for m in config.moves if m.from_state == current]
+        applicable = [t.name for t in config.transitions if t.from_state == current]
         if applicable:
             results.append({
                 "file": str(path.relative_to(directory)),
                 "status": current,
-                "moves": applicable,
+                "transitions": applicable,
                 "missing": False,
             })
 
@@ -90,7 +92,7 @@ def next_moves(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
                 results.append({
                     "file": f.file,
                     "status": None,
-                    "moves": [],
+                    "transitions": [],
                     "missing": True,
                 })
     else:
@@ -101,7 +103,7 @@ def next_moves(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
                     results.append({
                         "file": doc.file,
                         "status": None,
-                        "moves": [],
+                        "transitions": [],
                         "missing": True,
                     })
 
