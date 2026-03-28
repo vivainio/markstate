@@ -20,6 +20,7 @@ def _load_config() -> FlowConfig:
 
 
 @click.group()
+@click.version_option()
 def main() -> None:
     """Generic document flow processor."""
 

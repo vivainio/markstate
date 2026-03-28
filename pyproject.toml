@@ -1,6 +1,6 @@
 [project]
 name = "markstate"
-version = "0.1.0"
+version = "0.0.0"
 description = "Generic document flow processor for state tracking in markdown front matter"
 requires-python = ">=3.11"
 dependencies = [
