@@ -124,6 +124,10 @@ def status(config: FlowConfig, directory: Path) -> dict[str, object]:
     }
 
 
+def _tasks_all_done(done: int, total: int) -> bool:
+    return total > 0 and done == total
+
+
 def _all_pass(conditions: list[Condition], config: FlowConfig, directory: Path) -> bool:
     return all(_evaluate(c, config, directory) for c in conditions)
 
@@ -149,17 +153,13 @@ def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool
         path = directory / condition.file
         if not path.exists():
             return False
-        done, total = frontmatter.count_tasks(path.read_text())
-        return total > 0 and done == total
+        return _tasks_all_done(*frontmatter.count_tasks(path.read_text()))
 
     if condition.glob is not None and condition.tasks is not None:
         paths = list(directory.glob(condition.glob))
         if not paths:
             return False
-        return all(
-            (lambda d, t: t > 0 and d == t)(*frontmatter.count_tasks(p.read_text()))
-            for p in paths
-        )
+        return all(_tasks_all_done(*frontmatter.count_tasks(p.read_text())) for p in paths)
 
     return False
 
