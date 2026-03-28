@@ -77,6 +77,23 @@ spec.md: draft → approved
 
 When a transition causes a phase change, the new phase and its completion conditions are printed. Files marked `auto: true` in the new phase's `produces` are created automatically.
 
+### `--set key=value`
+
+`new`, `set`, `do`, and `check` all accept one or more `--set key=value` flags to write additional frontmatter fields alongside the main operation:
+
+```
+markstate do accept proposal.md --set reviewer=me --set reviewed_at=now
+markstate set approved spec.md --set approved_by=me
+markstate new proposal.md --set author=me --set created_at=now
+```
+
+Two magic values are expanded automatically:
+
+| Value | Expands to |
+|---|---|
+| `me` | Git user name (`git config user.name`) |
+| `now` | UTC timestamp in ISO 8601 format (`2026-03-28T12:00:00Z`) |
+
 ### `status`
 
 Show file statuses and phase progress:

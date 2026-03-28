@@ -2,7 +2,9 @@
 
 import argparse
 import json
+import subprocess
 import sys
+from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
 
@@ -12,6 +14,39 @@ from markstate.engine import TaskNotFoundError, TransitionError
 
 
 FOCUS_FILE = ".markstate-focus"
+
+
+def _resolve_magic(value: str) -> str:
+    if value == "me":
+        try:
+            return subprocess.run(
+                ["git", "config", "user.name"], capture_output=True, text=True, check=True
+            ).stdout.strip()
+        except subprocess.CalledProcessError:
+            return value
+    if value == "now":
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return value
+
+
+def _parse_set_args(set_args: list[str]) -> dict[str, str]:
+    result = {}
+    for item in set_args:
+        if "=" not in item:
+            print(f"error: --set value must be key=value, got '{item}'", file=sys.stderr)
+            sys.exit(1)
+        key, _, value = item.partition("=")
+        result[key] = _resolve_magic(value)
+    return result
+
+
+def _apply_extra_fields(path: Path, fields: dict[str, str]) -> None:
+    if not fields:
+        return
+    doc = frontmatter.load(path)
+    for key, value in fields.items():
+        doc.set(key, value)
+    doc.save()
 
 
 def _try_load_config() -> FlowConfig | None:
@@ -137,6 +172,7 @@ def _cmd_init(args: argparse.Namespace) -> None:
 def _cmd_new(args: argparse.Namespace) -> None:
     config = _load_config()
     cwd = Path.cwd()
+    extra = _parse_set_args(args.set)
 
     _, dir_entry = engine.find_dir_template(config, cwd)
 
@@ -150,6 +186,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
             sys.exit(1)
         target = cwd / args.file
         _write_doc(produced, target, args.force)
+        _apply_extra_fields(target, extra)
     else:
         # Top-level: find a matching ProducedDoc or ProducedDir
         file_path = Path(args.file)
@@ -158,9 +195,13 @@ def _cmd_new(args: argparse.Namespace) -> None:
                 if isinstance(entry, ProducedDoc) and entry.file == args.file:
                     target = Path(args.directory).resolve() / args.file
                     _write_doc(entry, target, args.force)
+                    _apply_extra_fields(target, extra)
                     return
                 if isinstance(entry, ProducedDir) and file_path.match(entry.dir):
-                    _write_dir(entry, Path(args.directory).resolve() / args.file, args.force)
+                    dir_target = Path(args.directory).resolve() / args.file
+                    _write_dir(entry, dir_target, args.force)
+                    for f in entry.files:
+                        _apply_extra_fields(dir_target / f.file, extra)
                     return
         print(f"error: '{args.file}' does not match any produces entry", file=sys.stderr)
         sys.exit(1)
@@ -219,6 +260,7 @@ def _report_transition(
 def _cmd_set(args: argparse.Namespace) -> None:
     config = _try_load_config()
     status_field = config.status_field if config else "status"
+    extra = _parse_set_args(args.set)
     for t in args.targets:
         target = Path(t).resolve()
         if not target.exists():
@@ -227,6 +269,8 @@ def _cmd_set(args: argparse.Namespace) -> None:
         doc = frontmatter.load(target)
         old = str(doc.get(status_field) or "")
         doc.set(status_field, args.status)
+        for key, value in extra.items():
+            doc.set(key, value)
         doc.save()
         print(f"{t}: {old or '(none)'} → {args.status}")
 
@@ -244,6 +288,8 @@ def _cmd_do(args: argparse.Namespace) -> None:
     except TransitionError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    _apply_extra_fields(target, _parse_set_args(args.set))
 
     phase_after = engine.current_phase(config, directory)
     _report_transition(phase_before, phase_after, config, directory)
@@ -394,6 +440,7 @@ def _cmd_check(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     print(f"  {result['file']}  [x] {result['task']}  ({result['done']}/{result['total']})")
+    _apply_extra_fields(directory / result["file"], _parse_set_args(args.set))
 
     phase_after = engine.current_phase(config, directory)
     _report_transition(phase_before, phase_after, config, directory)
@@ -439,17 +486,20 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("file", metavar=_new_metavar(config))
     p.add_argument("directory", nargs="?", default=None)
     p.add_argument("--force", action="store_true", help="Overwrite existing file")
+    p.add_argument("--set", metavar="KEY=VALUE", action="append", default=[], help="Set extra frontmatter fields (use 'me' for git user, 'now' for timestamp)")
 
     # set
     p = sub.add_parser("set", help="Set the status of one or more documents directly.")
     p.add_argument("status", metavar="STATUS")
     p.add_argument("targets", metavar="FILE", nargs="+")
+    p.add_argument("--set", metavar="KEY=VALUE", action="append", default=[], help="Set extra frontmatter fields (use 'me' for git user, 'now' for timestamp)")
 
     # do
     transition_metavar = "[" + "|".join(transition_names) + "]" if transition_names else "TRANSITION"
     p = sub.add_parser("do", help="Apply a named transition to a document.")
     p.add_argument("transition_name", metavar=transition_metavar)
     p.add_argument("target", metavar="FILE")
+    p.add_argument("--set", metavar="KEY=VALUE", action="append", default=[], help="Set extra frontmatter fields (use 'me' for git user, 'now' for timestamp)")
 
     # focus
     p = sub.add_parser("focus", help="Set or show the current task directory.")
@@ -481,6 +531,7 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p = sub.add_parser("check", help="Check off a task by substring match.")
     p.add_argument("substring", metavar="TEXT")
     p.add_argument("directory", nargs="?", default=None)
+    p.add_argument("--set", metavar="KEY=VALUE", action="append", default=[], help="Set extra frontmatter fields (use 'me' for git user, 'now' for timestamp)")
 
     return parser
 

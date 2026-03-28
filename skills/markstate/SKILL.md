@@ -19,18 +19,22 @@ and transitions based on those statuses and checkbox task completion.
 - `markstate next-task [DIR]` — show the first unchecked `- [ ]` task. When
   all tasks are done, reports the current phase and auto-creates any `auto: true`
   documents for the entered phase.
-- `markstate do TRANSITION FILE` — apply a named transition to a document. Reports
-  the status change and any phase change.
+- `markstate do TRANSITION FILE [--set KEY=VALUE ...]` — apply a named transition
+  to a document. Reports the status change and any phase change.
 - `markstate check TEXT [DIR]` — check off the first unchecked task whose text
   contains TEXT (case-insensitive). Reports `(N/M)` progress and fires a phase
   transition if it was the last task.
-- `markstate set STATUS FILE...` — set status directly without a defined transition.
-  Works without `flow.yml`.
+- `markstate set STATUS FILE... [--set KEY=VALUE ...]` — set status directly without
+  a defined transition. Works without `flow.yml`.
 - `markstate new FILE [DIR]` — create a document from its template defined in
   `flow.yml`.
 - `markstate check-gate PHASE [DIR]` — verify a phase's gate conditions.
   Exits 0 if satisfied, 1 otherwise.
 - `markstate transitions` — list all defined transitions.
+
+`new`, `set`, `do`, and `check` all accept `--set KEY=VALUE` (repeatable) to write
+extra frontmatter fields alongside the main operation. Magic values: `me` expands to
+the git user name, `now` to a UTC ISO 8601 timestamp.
 
 **Typical flow**
 
