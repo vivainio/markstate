@@ -1,8 +1,8 @@
 # markstate
 
-Generic document flow processor for state tracking in markdown front matter.
+Track the status of any markdown documents through a defined workflow — phases, gate conditions, and transitions stored in a `flow.yml` beside your docs.
 
-Define a workflow in `flow.yml` — phases, gate conditions, and transitions — then use `markstate` to track and advance documents through the flow.
+Works for any document-centric process: spec reviews, ADRs, runbooks, content pipelines. A particularly good fit is **spec-driven development**, where proposals, specs, and task lists move through stages like draft → approved → in-progress → done, and an AI agent or human needs to know exactly where everything stands before proceeding.
 
 ## Examples
 
