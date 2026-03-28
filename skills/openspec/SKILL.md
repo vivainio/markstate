@@ -43,13 +43,12 @@ Write `proposal.md` and `design.md` before accepting either.
 
 - `proposal.md` — intent, scope, and out-of-scope
 - `design.md` — technical approach and affected areas
-- `specs/<domain>/spec.md` — delta specs describing what changes in the source of truth (ADDED/MODIFIED/REMOVED requirements). Create as needed:
+- `specs/<domain>/spec.md` — delta specs describing what changes in the source of truth (ADDED/MODIFIED/REMOVED requirements). At least one is required. Create one per affected domain:
 
   ```
   markstate new specs/auth
+  markstate new specs/ui
   ```
-
-  Delta specs are optional for small changes. When present, accept them too before advancing.
 
 When ready to implement:
 
@@ -88,4 +87,5 @@ markstate do reopen design.md
 - Do NOT write code before both `proposal.md` and `design.md` are accepted
 - Do NOT use `markstate set` to skip the acceptance gate
 - Keep tasks high-level — plan sub-steps in plan mode, not as extra checkboxes
+- Always create at least one delta spec — the gate requires `specs/*/spec.md` to be accepted
 - When writing delta specs, use ADDED/MODIFIED/REMOVED sections — describe behavior, not implementation

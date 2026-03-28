@@ -70,6 +70,8 @@ phases:
         status: accepted
       - file: design.md
         status: accepted
+      - glob: "specs/*/spec.md"
+        all_status: accepted
 
   - name: implementing
     gates:
