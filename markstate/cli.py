@@ -8,7 +8,7 @@ from pathlib import Path
 
 from markstate import engine, frontmatter
 from markstate.config import FlowConfig, ProducedDir, ProducedDoc, find_and_load
-from markstate.engine import MoveError
+from markstate.engine import MoveError, TaskNotFoundError
 
 
 FOCUS_FILE = ".markstate-focus"
@@ -274,8 +274,15 @@ def _cmd_status(args: argparse.Namespace) -> None:
     for path in sorted(directory.rglob("*.md")):
         doc = frontmatter.load(path)
         s = doc.get(status_field)
-        if s:
-            files[str(path.relative_to(directory))] = s
+        done, total = frontmatter.count_tasks(path.read_text())
+        if s or total > 0:
+            entry: dict = {}
+            if s:
+                entry["status"] = s
+            if total > 0:
+                entry["tasks_done"] = done
+                entry["tasks_total"] = total
+            files[str(path.relative_to(directory))] = entry
 
     if args.as_json:
         result = engine.status(config, directory) if config else {}
@@ -288,8 +295,10 @@ def _cmd_status(args: argparse.Namespace) -> None:
         print(f"current phase: {phase or '(complete)'}")
         print()
 
-    for rel, s in files.items():
-        print(f"  {rel:30s}  {s}")
+    for rel, entry in files.items():
+        s = entry.get("status", "")
+        task_info = f"  {entry['tasks_done']}/{entry['tasks_total']} tasks" if "tasks_total" in entry else ""
+        print(f"  {rel:30s}  {s:15s}{task_info}")
 
     if config:
         print()
@@ -343,6 +352,69 @@ def _cmd_next(args: argparse.Namespace) -> None:
                     f"{m} (→ {move_map[m]})" for m in item["moves"]
                 )
                 print(f"  {item['file']:30s}  {item['status']:15s}  → {moves}")
+
+
+def _cmd_next_task(args: argparse.Namespace) -> None:
+    config = _load_config()
+    directory = _resolve_directory(args, config)
+    phase_before = engine.current_phase(config, directory)
+    result = engine.next_task(config, directory)
+    if result is not None:
+        print(f"  {result['file']:30s}  {result['task']}")
+        return
+
+    print("all tasks done")
+    phase_after = engine.current_phase(config, directory)
+    if phase_after != phase_before:
+        print(f"→ entering phase: {phase_after.name if phase_after else '(complete)'}")
+        if phase_after and phase_after.advance_when:
+            print("  advance when:")
+            for cond in phase_after.advance_when:
+                print(f"    - {engine.describe_condition(cond)}")
+
+    if phase_after is None:
+        return
+    for doc in phase_after.produces:
+        if not isinstance(doc, ProducedDoc) or not doc.auto or doc.template is None:
+            continue
+        dest = directory / doc.file
+        if not dest.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(doc.template)
+            print(f"created {dest.relative_to(Path.cwd())}")
+
+
+def _cmd_check(args: argparse.Namespace) -> None:
+    config = _load_config()
+    directory = _resolve_directory(args, config)
+    phase_before = engine.current_phase(config, directory)
+
+    try:
+        result = engine.check_task(args.substring, config, directory)
+    except TaskNotFoundError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"  {result['file']}  [x] {result['task']}  ({result['done']}/{result['total']})")
+
+    phase_after = engine.current_phase(config, directory)
+    if phase_after != phase_before:
+        print(f"→ entering phase: {phase_after.name if phase_after else '(complete)'}")
+        if phase_after and phase_after.advance_when:
+            print("  advance when:")
+            for cond in phase_after.advance_when:
+                print(f"    - {engine.describe_condition(cond)}")
+
+    if phase_after is None:
+        return
+    for doc in phase_after.produces:
+        if not isinstance(doc, ProducedDoc) or not doc.auto or doc.template is None:
+            continue
+        dest = directory / doc.file
+        if not dest.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(doc.template)
+            print(f"created {dest.relative_to(Path.cwd())}")
 
 
 def _new_metavar(config: FlowConfig | None) -> str:
@@ -419,6 +491,15 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
     p.add_argument("directory", nargs="?", default=None)
 
+    # next-task
+    p = sub.add_parser("next-task", help="Show the first unchecked task in the current directory.")
+    p.add_argument("directory", nargs="?", default=None)
+
+    # check
+    p = sub.add_parser("check", help="Check off a task by substring match.")
+    p.add_argument("substring", metavar="TEXT")
+    p.add_argument("directory", nargs="?", default=None)
+
     return parser
 
 
@@ -441,5 +522,7 @@ def main() -> None:
         "check-gate": _cmd_check_gate,
         "moves": _cmd_moves,
         "next": _cmd_next,
+        "next-task": _cmd_next_task,
+        "check": _cmd_check,
     }
     dispatch[args.command](args)

@@ -1,9 +1,13 @@
 """Read and write YAML front matter in markdown files."""
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+
+_TASK_RE = re.compile(r'^(\s*-\s+\[)([ xX])(\]\s+)(.*)', re.MULTILINE)
 
 
 DELIMITER = "---"
@@ -23,6 +27,35 @@ class Document:
 
     def save(self) -> None:
         self.path.write_text(_serialize(self.front_matter, self.body))
+
+
+def count_tasks(text: str) -> tuple[int, int]:
+    """Return (done, total) checkbox task counts."""
+    matches = _TASK_RE.findall(text)
+    total = len(matches)
+    done = sum(1 for _, mark, _, _ in matches if mark.lower() == "x")
+    return done, total
+
+
+def next_unchecked_task(text: str) -> str | None:
+    """Return the text of the first unchecked task, or None."""
+    for m in _TASK_RE.finditer(text):
+        if m.group(2) == " ":
+            return m.group(4)
+    return None
+
+
+def check_task(text: str, substring: str) -> tuple[str, str] | None:
+    """Check off the first unchecked task whose text contains substring.
+
+    Returns (updated_text, task_text) or None if no match.
+    """
+    for m in _TASK_RE.finditer(text):
+        if m.group(2) == " " and substring.lower() in m.group(4).lower():
+            task_text = m.group(4)
+            new_text = text[: m.start(2)] + "x" + text[m.end(2) :]
+            return new_text, task_text
+    return None
 
 
 def load(path: Path) -> Document:

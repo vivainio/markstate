@@ -22,6 +22,7 @@ class Condition:
     glob: str | None = None
     status: str | None = None
     all_status: str | None = None
+    tasks: str | None = None  # "all_done"
 
 
 @dataclass
@@ -143,4 +144,5 @@ def _parse_condition(raw: dict) -> Condition:
         glob=raw.get("glob"),
         status=raw.get("status"),
         all_status=raw.get("all_status"),
+        tasks=raw.get("tasks"),
     )

@@ -10,6 +10,10 @@ class MoveError(Exception):
     pass
 
 
+class TaskNotFoundError(Exception):
+    pass
+
+
 def current_phase(config: FlowConfig, directory: Path) -> Phase | None:
     """Return the first phase whose gates all pass but advance_when conditions don't all pass."""
     for phase in config.phases:
@@ -141,7 +145,53 @@ def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool
             for p in paths
         )
 
+    if condition.file is not None and condition.tasks is not None:
+        path = directory / condition.file
+        if not path.exists():
+            return False
+        done, total = frontmatter.count_tasks(path.read_text())
+        return total > 0 and done == total
+
+    if condition.glob is not None and condition.tasks is not None:
+        paths = list(directory.glob(condition.glob))
+        if not paths:
+            return False
+        return all(
+            (lambda d, t: t > 0 and d == t)(*frontmatter.count_tasks(p.read_text()))
+            for p in paths
+        )
+
     return False
+
+
+def next_task(config: FlowConfig, directory: Path) -> dict | None:
+    """Return the first unchecked task found in any .md file under directory."""
+    for path in sorted(directory.rglob("*.md")):
+        task = frontmatter.next_unchecked_task(path.read_text())
+        if task:
+            return {"file": str(path.relative_to(directory)), "task": task}
+    return None
+
+
+def check_task(substring: str, config: FlowConfig, directory: Path) -> dict:
+    """Check off the first unchecked task matching substring.
+
+    Returns {"file", "task", "done", "total"}.
+    Raises TaskNotFoundError if no match.
+    """
+    for path in sorted(directory.rglob("*.md")):
+        result = frontmatter.check_task(path.read_text(), substring)
+        if result:
+            new_text, task_text = result
+            path.write_text(new_text)
+            done, total = frontmatter.count_tasks(new_text)
+            return {
+                "file": str(path.relative_to(directory)),
+                "task": task_text,
+                "done": done,
+                "total": total,
+            }
+    raise TaskNotFoundError(f"no unchecked task matching '{substring}'")
 
 
 def describe_condition(condition: Condition) -> str:
@@ -149,4 +199,8 @@ def describe_condition(condition: Condition) -> str:
         return f"{condition.file} must have status '{condition.status}'"
     if condition.glob and condition.all_status:
         return f"all files matching '{condition.glob}' must have status '{condition.all_status}'"
+    if condition.file and condition.tasks:
+        return f"all tasks in {condition.file} must be done"
+    if condition.glob and condition.tasks:
+        return f"all tasks in files matching '{condition.glob}' must be done"
     return str(condition)
