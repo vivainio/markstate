@@ -187,6 +187,32 @@ def _write_dir(entry: ProducedDir, target: Path, force: bool) -> None:
         _write_doc(f, target / f.file, force)
 
 
+def _report_transition(phase_before, phase_after, config, directory: Path) -> None:
+    """Print phase transition message and auto-create docs for the entered phase."""
+    if phase_after == phase_before:
+        return
+    print(f"→ entering phase: {phase_after.name if phase_after else '(complete)'}")
+    if phase_after and phase_after.advance_when:
+        print("  advance when:")
+        for cond in phase_after.advance_when:
+            print(f"    - {engine.describe_condition(cond)}")
+
+    # For auto docs: use phase_after if present, else find the terminal phase just entered
+    docs_phase = phase_after
+    if docs_phase is None and phase_before is not None:
+        docs_phase = engine.find_entered_phase(config, directory)
+    if docs_phase is None:
+        return
+    for doc in docs_phase.produces:
+        if not isinstance(doc, ProducedDoc) or not doc.auto or doc.template is None:
+            continue
+        dest = directory / doc.file
+        if not dest.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(doc.template)
+            print(f"created {dest.relative_to(Path.cwd())}")
+
+
 def _cmd_set(args: argparse.Namespace) -> None:
     config = _try_load_config()
     status_field = config.status_field if config else "status"
@@ -217,24 +243,7 @@ def _cmd_do(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     phase_after = engine.current_phase(config, directory)
-
-    if phase_after != phase_before:
-        print(f"→ entering phase: {phase_after.name if phase_after else '(complete)'}")
-        if phase_after and phase_after.advance_when:
-            print("  advance when:")
-            for cond in phase_after.advance_when:
-                print(f"    - {engine.describe_condition(cond)}")
-
-    if phase_after is None:
-        return
-    for doc in phase_after.produces:
-        if not isinstance(doc, ProducedDoc) or not doc.auto or doc.template is None:
-            continue
-        dest = directory / doc.file
-        if not dest.exists():
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(doc.template)
-            print(f"created {dest.relative_to(Path.cwd())}")
+    _report_transition(phase_before, phase_after, config, directory)
 
 
 def _find_focus_dir(query: str, docs_root: Path) -> Path:
@@ -357,24 +366,20 @@ def _cmd_next(args: argparse.Namespace) -> None:
 def _cmd_next_task(args: argparse.Namespace) -> None:
     config = _load_config()
     directory = _resolve_directory(args, config)
-    phase_before = engine.current_phase(config, directory)
     result = engine.next_task(config, directory)
     if result is not None:
         print(f"  {result['file']:30s}  {result['task']}")
         return
 
     print("all tasks done")
-    phase_after = engine.current_phase(config, directory)
-    if phase_after != phase_before:
-        print(f"→ entering phase: {phase_after.name if phase_after else '(complete)'}")
-        if phase_after and phase_after.advance_when:
-            print("  advance when:")
-            for cond in phase_after.advance_when:
-                print(f"    - {engine.describe_condition(cond)}")
+    phase = engine.current_phase(config, directory)
+    print(f"→ phase: {phase.name if phase else '(complete)'}")
 
-    if phase_after is None:
+    # Create any missing auto docs for the entered phase (idempotent)
+    entered = engine.find_entered_phase(config, directory)
+    if entered is None:
         return
-    for doc in phase_after.produces:
+    for doc in entered.produces:
         if not isinstance(doc, ProducedDoc) or not doc.auto or doc.template is None:
             continue
         dest = directory / doc.file
@@ -398,23 +403,7 @@ def _cmd_check(args: argparse.Namespace) -> None:
     print(f"  {result['file']}  [x] {result['task']}  ({result['done']}/{result['total']})")
 
     phase_after = engine.current_phase(config, directory)
-    if phase_after != phase_before:
-        print(f"→ entering phase: {phase_after.name if phase_after else '(complete)'}")
-        if phase_after and phase_after.advance_when:
-            print("  advance when:")
-            for cond in phase_after.advance_when:
-                print(f"    - {engine.describe_condition(cond)}")
-
-    if phase_after is None:
-        return
-    for doc in phase_after.produces:
-        if not isinstance(doc, ProducedDoc) or not doc.auto or doc.template is None:
-            continue
-        dest = directory / doc.file
-        if not dest.exists():
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(doc.template)
-            print(f"created {dest.relative_to(Path.cwd())}")
+    _report_transition(phase_before, phase_after, config, directory)
 
 
 def _new_metavar(config: FlowConfig | None) -> str:

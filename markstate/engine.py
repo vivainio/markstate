@@ -164,6 +164,15 @@ def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool
     return False
 
 
+def find_entered_phase(config: FlowConfig, directory: Path) -> Phase | None:
+    """Return the last phase whose entry gates are satisfied (may already be complete)."""
+    entered = None
+    for phase in config.phases:
+        if _all_pass(phase.gates, config, directory):
+            entered = phase
+    return entered
+
+
 def next_task(config: FlowConfig, directory: Path) -> dict | None:
     """Return the first unchecked task found in any .md file under directory."""
     for path in sorted(directory.rglob("*.md")):
