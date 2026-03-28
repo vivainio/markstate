@@ -25,9 +25,22 @@ class Condition:
 
 
 @dataclass
+class ProducedDoc:
+    file: str
+    template: str | None = None
+    auto: bool = False
+
+
+@dataclass
+class ProducedDir:
+    dir: str
+    files: list[ProducedDoc] = field(default_factory=list)
+
+
+@dataclass
 class Phase:
     name: str
-    produces: list[str] = field(default_factory=list)
+    produces: list[ProducedDoc | ProducedDir] = field(default_factory=list)
     gates: list[Condition] = field(default_factory=list)
     advance_when: list[Condition] = field(default_factory=list)
 
@@ -35,6 +48,7 @@ class Phase:
 @dataclass
 class FlowConfig:
     root: Path
+    docs_root: Path
     status_field: str
     phases: list[Phase]
     moves: list[Move]
@@ -71,8 +85,16 @@ def _load(path: Path) -> FlowConfig:
     phases = [_parse_phase(p) for p in raw.get("phases", [])]
     moves = [_parse_move(m) for m in raw.get("moves", [])]
 
+    config_dir = path.parent
+    docs_root_raw = raw.get("docs_root")
+    if docs_root_raw is not None:
+        docs_root = (config_dir / docs_root_raw).resolve()
+    else:
+        docs_root = config_dir
+
     return FlowConfig(
-        root=path.parent,
+        root=config_dir,
+        docs_root=docs_root,
         status_field=raw.get("status_field", "status"),
         phases=phases,
         moves=moves,
@@ -80,11 +102,30 @@ def _load(path: Path) -> FlowConfig:
 
 
 def _parse_phase(raw: dict) -> Phase:
+    produces = []
+    for p in raw.get("produces", []):
+        if isinstance(p, str) or (isinstance(p, dict) and "file" in p):
+            produces.append(_parse_produced_doc(p))
+        elif isinstance(p, dict) and "dir" in p:
+            produces.append(_parse_produced_dir(p))
     return Phase(
         name=raw["name"],
-        produces=raw.get("produces", []),
+        produces=produces,
         gates=[_parse_condition(c) for c in raw.get("gates", [])],
         advance_when=[_parse_condition(c) for c in raw.get("advance_when", [])],
+    )
+
+
+def _parse_produced_doc(raw: str | dict) -> ProducedDoc:
+    if isinstance(raw, str):
+        return ProducedDoc(file=raw)
+    return ProducedDoc(file=raw["file"], template=raw.get("template"), auto=raw.get("auto", False))
+
+
+def _parse_produced_dir(raw: dict) -> ProducedDir:
+    return ProducedDir(
+        dir=raw["dir"],
+        files=[_parse_produced_doc(f) for f in raw.get("files", [])],
     )
 
 

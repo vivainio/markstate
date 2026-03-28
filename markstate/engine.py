@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from markstate import frontmatter
-from markstate.config import Condition, FlowConfig, Move, Phase
+from markstate.config import Condition, FlowConfig, Move, Phase, ProducedDir, ProducedDoc
 
 
 class MoveError(Exception):
@@ -22,7 +22,7 @@ def current_phase(config: FlowConfig, directory: Path) -> Phase | None:
 
 def check_gate(phase: Phase, config: FlowConfig, directory: Path) -> list[str]:
     """Return list of unmet gate conditions, empty if all pass."""
-    return [_describe(c) for c in phase.gates if not _evaluate(c, config, directory)]
+    return [describe_condition(c) for c in phase.gates if not _evaluate(c, config, directory)]
 
 
 def do_move(move_name: str, target: Path, config: FlowConfig) -> tuple[str, str]:
@@ -43,6 +43,65 @@ def do_move(move_name: str, target: Path, config: FlowConfig) -> tuple[str, str]
     doc.set(config.status_field, move.to_state)
     doc.save()
     return current, move.to_state
+
+
+def find_dir_template(config: FlowConfig, cwd: Path) -> tuple[Path, ProducedDir] | tuple[None, None]:
+    """Walk up from cwd toward config.docs_root to find a matching dir template."""
+    if not cwd.is_relative_to(config.docs_root):
+        return None, None
+    candidate = cwd
+    while candidate != config.docs_root:
+        task_dir = candidate.parent
+        rel = cwd.relative_to(task_dir)
+        for phase in config.phases:
+            for entry in phase.produces:
+                if isinstance(entry, ProducedDir) and rel.match(entry.dir):
+                    return task_dir, entry
+        candidate = task_dir
+    return None, None
+
+
+def next_moves(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
+    """Return actionable next steps: applicable moves on existing docs, and missing produced docs."""
+    results = []
+
+    for path in sorted(directory.rglob("*.md")):
+        doc = frontmatter.load(path)
+        current = str(doc.get(config.status_field) or "")
+        if not current:
+            continue
+        applicable = [m.name for m in config.moves if m.from_state == current]
+        if applicable:
+            results.append({
+                "file": str(path.relative_to(directory)),
+                "status": current,
+                "moves": applicable,
+                "missing": False,
+            })
+
+    task_dir, dir_entry = find_dir_template(config, directory)
+    if dir_entry:
+        for f in dir_entry.files:
+            if not (directory / f.file).exists():
+                results.append({
+                    "file": f.file,
+                    "status": None,
+                    "moves": [],
+                    "missing": True,
+                })
+    else:
+        phase = current_phase(config, directory)
+        if phase:
+            for doc in phase.produces:
+                if isinstance(doc, ProducedDoc) and not (directory / doc.file).exists():
+                    results.append({
+                        "file": doc.file,
+                        "status": None,
+                        "moves": [],
+                        "missing": True,
+                    })
+
+    return results
 
 
 def status(config: FlowConfig, directory: Path) -> dict[str, object]:
@@ -85,7 +144,7 @@ def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool
     return False
 
 
-def _describe(condition: Condition) -> str:
+def describe_condition(condition: Condition) -> str:
     if condition.file and condition.status:
         return f"{condition.file} must have status '{condition.status}'"
     if condition.glob and condition.all_status:
