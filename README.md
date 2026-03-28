@@ -1,13 +1,13 @@
-# doc-flow
+# markstate
 
 Generic document flow processor for state tracking in markdown front matter.
 
-Define a workflow in `flow.yml` — phases, gate conditions, and moves — then use `doc-flow` to track and advance documents through the flow.
+Define a workflow in `flow.yml` — phases, gate conditions, and moves — then use `markstate` to track and advance documents through the flow.
 
 ## Install
 
 ```bash
-pip install doc-flow
+pip install markstate
 ```
 
 ## Quick start
@@ -54,16 +54,16 @@ status: draft
 ## Commands
 
 ```
-doc-flow status [DIRECTORY]        Show current phase and completion status
-doc-flow do MOVE TARGET            Apply a named move to a document
-doc-flow moves                     List all available moves
-doc-flow check-gate PHASE [DIR]    Check if gate conditions for a phase are met
+markstate status [DIRECTORY]        Show current phase and completion status
+markstate do MOVE TARGET            Apply a named move to a document
+markstate moves                     List all available moves
+markstate check-gate PHASE [DIR]    Check if gate conditions for a phase are met
 ```
 
 ### `status`
 
 ```
-$ doc-flow status
+$ markstate status
 current phase: drafting
 
   drafting              gates=ok  in progress
@@ -77,7 +77,7 @@ Add `--json` for machine-readable output.
 Apply a move to advance a document's status:
 
 ```
-$ doc-flow do approve-spec spec.md
+$ markstate do approve-spec spec.md
 spec.md: draft → approved
 ```
 
@@ -86,7 +86,7 @@ Moves are validated against the current status — applying a move to a document
 ### `moves`
 
 ```
-$ doc-flow moves
+$ markstate moves
   approve-spec          draft → approved
   mark-reviewed         in-review → reviewed
 ```
@@ -96,7 +96,7 @@ $ doc-flow moves
 Exits 0 if all gate conditions pass, 1 otherwise:
 
 ```
-$ doc-flow check-gate review
+$ markstate check-gate review
 gate not satisfied:
   - spec.md must have status 'approved'
 ```
@@ -130,7 +130,7 @@ gate not satisfied:
 
 | Field | Description |
 |---|---|
-| `name` | Move name (used with `doc-flow do`) |
+| `name` | Move name (used with `markstate do`) |
 | `from` | Required current status |
 | `to` | New status after applying the move |
 

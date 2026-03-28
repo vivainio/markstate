@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from doc_flow import frontmatter
-from doc_flow.config import Condition, FlowConfig, Move, Phase
+from markstate import frontmatter
+from markstate.config import Condition, FlowConfig, Move, Phase
 
 
 class MoveError(Exception):

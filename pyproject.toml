@@ -1,5 +1,5 @@
 [project]
-name = "doc-flow"
+name = "markstate"
 version = "0.1.0"
 description = "Generic document flow processor for state tracking in markdown front matter"
 requires-python = ">=3.11"
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-doc-flow = "doc_flow.cli:main"
+markstate = "markstate.cli:main"
 
 [tool.uv]
 package = true

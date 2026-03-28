@@ -24,7 +24,7 @@ wheels = [
 ]
 
 [[package]]
-name = "doc-flow"
+name = "markstate"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
