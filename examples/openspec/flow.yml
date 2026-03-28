@@ -1,17 +1,19 @@
-# OpenSpec-style flow. Place this at changes/flow.yml.
-# Use `markstate focus changes/add-dark-mode` to work on a specific change.
+# OpenSpec-style flow. Place this at openspec/flow.yml.
+# Use `markstate focus add-dark-mode` to work on a specific change.
 #
 # Directory layout:
 #   openspec/
+#     flow.yml            ← this file
 #     specs/              ← source of truth (managed separately)
-#     changes/
-#       flow.yml          ← this file
+#     changes/            ← docs_root points here
 #       add-dark-mode/
 #         proposal.md
 #         design.md
 #         specs/          ← delta specs (ADDED/MODIFIED/REMOVED requirements)
 #           ui/spec.md
 #         tasks.md
+
+docs_root: changes
 
 phases:
   - name: speccing

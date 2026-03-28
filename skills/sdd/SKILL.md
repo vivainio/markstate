@@ -13,14 +13,14 @@ Each change lives in its own directory with a `flow.yml` tracking four phases:
 
 ```
 mkdir specs
-cp <markstate-examples>/sdd/flow.yml specs/flow.yml
+cp <markstate-examples>/sdd/flow.yml flow.yml   # or sdd/flow.yml if keeping it contained
 ```
 
 **Starting a new spec**
 
 ```
 mkdir specs/PROJ-123.add-auth
-markstate focus specs/PROJ-123.add-auth
+markstate focus PROJ-123.add-auth
 ```
 
 **Phase 1 — Drafting**

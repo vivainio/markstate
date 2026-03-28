@@ -1,5 +1,8 @@
-# Minimal spec-driven development flow. Place this at specs/flow.yml.
-# Use `markstate focus specs/PROJ-123.add-auth` to work on a specific spec.
+# Minimal spec-driven development flow. Place this at the project root or a
+# dedicated specs directory. docs_root points to where the specs live.
+# Use `markstate focus PROJ-123.add-auth` to work on a specific spec.
+
+docs_root: specs
 
 phases:
   - name: drafting

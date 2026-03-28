@@ -8,9 +8,9 @@ Three phases: **speccing → implementing → done**.
 
 ```
 openspec/
+  flow.yml            ← shared flow definition (docs_root: changes)
   specs/              ← source of truth (domain specs, managed separately)
   changes/
-    flow.yml          ← shared flow definition
     add-dark-mode/
       proposal.md     ← why and what
       design.md       ← technical approach
@@ -25,14 +25,14 @@ openspec/
 
 ```
 mkdir -p openspec/changes
-cp <markstate-examples>/openspec/flow.yml openspec/changes/flow.yml
+cp <markstate-examples>/openspec/flow.yml openspec/flow.yml
 ```
 
 **Starting a new change**
 
 ```
 mkdir openspec/changes/add-dark-mode
-markstate focus openspec/changes/add-dark-mode
+markstate focus add-dark-mode
 markstate new proposal.md
 markstate new design.md
 ```
