@@ -23,11 +23,21 @@ pip install markstate
 
 ## Quick start
 
-```
-markstate init          # create a template flow.yml
-markstate new spec.md   # create a document from its template
-markstate next          # see what you can do
-markstate do approve spec.md
+```bash
+# Install the CLI
+pip install markstate
+
+# Install the skills into Claude Code
+uvx skillset add vivainio/markstate
+
+# Bootstrap a hidden SDD workflow — nothing visible in the repo until you're ready
+markstate init https://raw.githubusercontent.com/vivainio/markstate/main/examples/sdd/flow.yml --hidden
+# → creates .markstate/flow.yml and adds .markstate/ to .gitignore
+
+# Start the workflow
+markstate new proposal.md
+markstate next
+markstate do accept proposal.md
 markstate status
 ```
 
