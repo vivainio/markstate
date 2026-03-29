@@ -171,12 +171,15 @@ transitions:
 
 
 def _cmd_init(args: argparse.Namespace) -> None:
-    target = Path("flow.yml")
+    target = Path(args.path)
     if target.exists() and not args.force:
-        print("error: flow.yml already exists. Use --force to overwrite.", file=sys.stderr)
+        print(f"error: '{target}' already exists. Use --force to overwrite.", file=sys.stderr)
         sys.exit(1)
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(TEMPLATE_FLOW)
     print(f"created {target}")
+    if target.parent != Path(".") and target.parts[0].startswith("."):
+        print(f"hint: add '{target.parts[0]}/' to .gitignore to keep this invisible")
 
 
 def _cmd_new(args: argparse.Namespace) -> None:
@@ -561,7 +564,10 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
 
     # init
     p = sub.add_parser("init", help="Create a template flow.yml in the current directory.")
-    p.add_argument("--force", action="store_true", help="Overwrite existing flow.yml")
+    p.add_argument("path", nargs="?", default="flow.yml", metavar="PATH",
+                   help="Where to write flow.yml (default: flow.yml). "
+                        "Use e.g. .markstate/flow.yml to keep it hidden.")
+    p.add_argument("--force", action="store_true", help="Overwrite existing file")
 
     # new
     p = sub.add_parser("new", help="Create a document from its template defined in flow.yml.")
