@@ -228,7 +228,19 @@ def _cmd_new(args: argparse.Namespace) -> None:
         _apply_extra_fields(target, extra)
     else:
         # Top-level: find a matching ProducedDoc or ProducedDir
-        base = Path(args.directory).resolve() if args.directory else Path.cwd()
+        if args.directory:
+            base = Path(args.directory).resolve()
+        elif config.docs_root in cwd.parents or cwd == config.docs_root:
+            base = cwd  # already inside docs_root (e.g. a specific change dir)
+        else:
+            base = config.docs_root
+        target_path = (base / args.file).resolve()
+        if config.docs_root not in target_path.parents and target_path != config.docs_root:
+            print(
+                f"error: '{target_path}' is outside docs_root ({config.docs_root})",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         file_path = Path(args.file)
         for phase in config.phases:
             for entry in phase.produces:
