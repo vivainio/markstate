@@ -196,7 +196,16 @@ def _cmd_init(args: argparse.Namespace) -> None:
         target.write_text(TEMPLATE_FLOW)
     print(f"created {target}")
     if args.hidden:
-        print("hint: add '.markstate/' to .gitignore to keep this invisible")
+        gitignore = Path(".gitignore")
+        entry = ".markstate/\n"
+        if gitignore.exists():
+            existing = gitignore.read_text()
+            if ".markstate/" not in existing:
+                gitignore.write_text(existing.rstrip("\n") + "\n" + entry)
+                print("updated .gitignore")
+        else:
+            gitignore.write_text(entry)
+            print("created .gitignore")
 
 
 def _cmd_new(args: argparse.Namespace) -> None:
