@@ -75,6 +75,19 @@ def _read_focus(config: FlowConfig) -> Path | None:
     return None
 
 
+def _resolve_file(path_str: str, config: FlowConfig | None) -> Path:
+    """Resolve a file path: absolute paths used as-is, relative paths resolved
+    against doc base (focus > cwd-if-inside-docs_root) when config is available,
+    otherwise against cwd."""
+    p = Path(path_str)
+    if p.is_absolute():
+        return p
+    if config:
+        base = _resolve_doc_base(config)
+        return (base / path_str).resolve()
+    return p.resolve()
+
+
 def _resolve_doc_base(config: FlowConfig) -> Path:
     """Resolve the base directory for document operations (new, do).
 
@@ -328,7 +341,7 @@ def _cmd_set(args: argparse.Namespace) -> None:
     status_field = config.status_field if config else "status"
     extra = _parse_set_args(args.set)
     for t in args.targets:
-        target = Path(t).resolve()
+        target = _resolve_file(t, config)
         if not target.exists():
             print(f"error: '{t}' does not exist", file=sys.stderr)
             sys.exit(1)
@@ -343,9 +356,8 @@ def _cmd_set(args: argparse.Namespace) -> None:
 
 def _cmd_do(args: argparse.Namespace) -> None:
     config = _load_config()
-    base = _resolve_doc_base(config)
-    target = (base / args.target).resolve()
-    directory = base
+    directory = _resolve_doc_base(config)
+    target = _resolve_file(args.target, config)
 
     phase_before = engine.current_phase(config, directory)
 
