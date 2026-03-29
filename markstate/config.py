@@ -7,6 +7,7 @@ import yaml
 
 
 CONFIG_FILENAME = "flow.yml"
+HIDDEN_CONFIG_PATH = ".markstate/flow.yml"
 
 
 @dataclass
@@ -74,9 +75,10 @@ def find_and_load(start: Path | None = None) -> FlowConfig:
 
 def _find(start: Path) -> Path | None:
     for directory in [start, *start.parents]:
-        candidate = directory / CONFIG_FILENAME
-        if candidate.exists():
-            return candidate
+        for name in (CONFIG_FILENAME, HIDDEN_CONFIG_PATH):
+            candidate = directory / name
+            if candidate.exists():
+                return candidate
     return None
 
 

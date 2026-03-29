@@ -178,9 +178,28 @@ gate not satisfied:
   - spec.md must have status 'approved'
 ```
 
+## Trying it without visible marks
+
+To experiment without touching the repo visibly, place `flow.yml` inside a `.markstate/` directory and point `docs_root` at the same place:
+
+```
+.markstate/
+  flow.yml          ← discovered automatically
+  specs/            ← docs live here
+```
+
+```yaml
+# .markstate/flow.yml
+docs_root: specs
+```
+
+Add `.markstate/` to `.gitignore`. Nothing else in the repo is affected.
+
+If the experiment works and you want to share it, move `flow.yml` to the root and commit everything.
+
 ## Configuration reference
 
-`flow.yml` is discovered by walking up from the current directory.
+`flow.yml` is discovered by walking up from the current directory, checking `flow.yml` then `.markstate/flow.yml` at each level.
 
 | Field | Description |
 |---|---|
