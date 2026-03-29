@@ -233,7 +233,14 @@ def _cmd_new(args: argparse.Namespace) -> None:
         elif config.docs_root in cwd.parents or cwd == config.docs_root:
             base = cwd  # already inside docs_root (e.g. a specific change dir)
         else:
-            base = _read_focus(config) or config.docs_root
+            base = _read_focus(config)
+            if base is None:
+                print(
+                    "error: not inside docs_root and no focus set — "
+                    "run 'markstate focus <dir>' or cd into the target directory",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
         target_path = (base / args.file).resolve()
         if config.docs_root not in target_path.parents and target_path != config.docs_root:
             print(
