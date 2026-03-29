@@ -18,14 +18,14 @@ Each example includes a `flow.yml` to place at the root of your change collectio
 ## Install
 
 ```bash
-pip install markstate
+uv tool install markstate
 ```
 
 ## Quick start
 
 ```bash
 # Install the CLI
-pip install markstate
+uv tool install markstate
 
 # Install the sdd skill into Claude Code
 uvx skillset add vivainio/markstate -s sdd
