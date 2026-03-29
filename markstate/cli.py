@@ -233,7 +233,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
         elif config.docs_root in cwd.parents or cwd == config.docs_root:
             base = cwd  # already inside docs_root (e.g. a specific change dir)
         else:
-            base = config.docs_root
+            base = _read_focus(config) or config.docs_root
         target_path = (base / args.file).resolve()
         if config.docs_root not in target_path.parents and target_path != config.docs_root:
             print(
