@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -14,6 +15,8 @@ from markstate.engine import TaskNotFoundError, TransitionError
 
 
 FOCUS_FILE = ".markstate-focus"
+
+_PRED_RE = re.compile(r'^([a-zA-Z0-9_-]+)(>=|<=|!=|~=|>|<|=)(.+)$')
 
 
 def _resolve_magic(value: str) -> str:
@@ -436,6 +439,77 @@ def _cmd_next_task(args: argparse.Namespace) -> None:
         _create_auto_docs(entered, directory)
 
 
+def _eval_predicate(actual: object, op: str, value: str) -> bool:
+    actual_str = str(actual)
+    if op == "=":
+        return actual_str == value
+    if op == "!=":
+        return actual_str != value
+    if op == "~=":
+        return value.lower() in actual_str.lower()
+    # Ordered comparison: try numeric, fall back to string (handles ISO dates)
+    try:
+        a: float | str = float(actual_str)
+        v: float | str = float(value)
+    except ValueError:
+        a, v = actual_str, value
+    if op == ">":
+        return a > v
+    if op == "<":
+        return a < v
+    if op == ">=":
+        return a >= v
+    if op == "<=":
+        return a <= v
+    return False
+
+
+def _cmd_query(args: argparse.Namespace) -> None:
+    config = _try_load_config()
+
+    if args.directory:
+        root = Path(args.directory).resolve()
+    elif config:
+        root = config.docs_root
+    else:
+        root = Path.cwd()
+
+    predicates: list[tuple[str, str, str]] = []
+    for pred in args.predicates:
+        m = _PRED_RE.match(pred)
+        if not m:
+            print(
+                f"error: invalid predicate '{pred}' — expected field=value, field>value, etc.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        predicates.append((m.group(1), m.group(2), m.group(3)))
+
+    results: list[tuple[Path, frontmatter.Document]] = []
+    for path in sorted(root.rglob("*.md")):
+        doc = frontmatter.load(path)
+        if all(
+            doc.front_matter.get(field) is not None
+            and _eval_predicate(doc.front_matter[field], op, value)
+            for field, op, value in predicates
+        ):
+            results.append((path, doc))
+
+    if args.as_json:
+        output = []
+        for path, doc in results:
+            entry: dict = {"file": str(path.relative_to(root))}
+            entry.update({k: v for k, v in doc.front_matter.items()})
+            output.append(entry)
+        print(json.dumps(output, indent=2, default=str))
+        return
+
+    for path, doc in results:
+        rel = str(path.relative_to(root))
+        fm_parts = "  ".join(f"{k}={v}" for k, v in doc.front_matter.items())
+        print(f"  {rel:40s}  {fm_parts}")
+
+
 def _cmd_check(args: argparse.Namespace) -> None:
     config = _load_config()
     directory = _resolve_directory(args, config)
@@ -541,6 +615,21 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("directory", nargs="?", default=None)
     _add_set_arg(p)
 
+    # query
+    p = sub.add_parser(
+        "query",
+        help="Query documents by front matter fields (e.g. status=draft created-at>2024-01-01).",
+    )
+    p.add_argument(
+        "predicates",
+        metavar="FIELD=VALUE",
+        nargs="+",
+        help="One or more predicates: field=value, field!=value, field>value, field<value, field>=value, field<=value",
+    )
+    p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
+    p.add_argument("--dir", dest="directory", default=None, metavar="DIR",
+                   help="Root directory to search (default: docs_root or cwd)")
+
     return parser
 
 
@@ -565,5 +654,6 @@ def main() -> None:
         "next": _cmd_next,
         "next-task": _cmd_next_task,
         "check": _cmd_check,
+        "query": _cmd_query,
     }
     dispatch[args.command](args)

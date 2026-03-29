@@ -145,6 +145,29 @@ $ markstate transitions
   mark-reviewed         in-review → reviewed
 ```
 
+### `query`
+
+Find documents by front matter fields. Predicates are ANDed:
+
+```
+markstate query status=draft
+markstate query status=draft "created-at>2024-06-01"
+markstate query title~=api status!=done
+markstate query status=draft --json
+markstate query status=draft --dir path/to/docs
+```
+
+Supported operators:
+
+| Operator | Meaning |
+|---|---|
+| `=` | exact match |
+| `!=` | not equal |
+| `~=` | substring match (case-insensitive) |
+| `>` `<` `>=` `<=` | ordered comparison (numeric or string; ISO dates compare correctly) |
+
+Searches recursively from `docs_root` (or cwd if no `flow.yml`). Add `--json` for machine-readable output.
+
 ### `check-gate`
 
 Check if gate conditions for a phase are met. Exits 0 if satisfied, 1 otherwise:

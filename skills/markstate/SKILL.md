@@ -28,6 +28,11 @@ and transitions based on those statuses and checkbox task completion.
   a defined transition. Works without `flow.yml`.
 - `markstate new FILE [DIR]` — create a document from its template defined in
   `flow.yml`.
+- `markstate query PRED [PRED ...] [--json] [--dir DIR]` — find documents by
+  front matter fields. Predicates are ANDed. Operators: `=` (exact), `!=`,
+  `~=` (case-insensitive substring), `>`, `<`, `>=`, `<=` (numeric or string;
+  ISO dates compare correctly). Searches from `docs_root` or cwd.
+  Example: `markstate query status=draft "created-at>2024-06-01" title~=api`
 - `markstate check-gate PHASE [DIR]` — verify a phase's gate conditions.
   Exits 0 if satisfied, 1 otherwise.
 - `markstate transitions` — list all defined transitions.
