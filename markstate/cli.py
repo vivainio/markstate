@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
@@ -177,11 +178,20 @@ def _cmd_init(args: argparse.Namespace) -> None:
         sys.exit(1)
     target.parent.mkdir(parents=True, exist_ok=True)
     if args.source:
-        source = Path(args.source)
-        if not source.exists():
-            print(f"error: '{args.source}' not found", file=sys.stderr)
-            sys.exit(1)
-        target.write_text(source.read_text())
+        if args.source.startswith(("http://", "https://")):
+            try:
+                with urllib.request.urlopen(args.source) as resp:
+                    content = resp.read().decode()
+            except Exception as e:
+                print(f"error: could not fetch '{args.source}': {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            source = Path(args.source)
+            if not source.exists():
+                print(f"error: '{args.source}' not found", file=sys.stderr)
+                sys.exit(1)
+            content = source.read_text()
+        target.write_text(content)
     else:
         target.write_text(TEMPLATE_FLOW)
     print(f"created {target}")
