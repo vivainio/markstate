@@ -196,16 +196,17 @@ def _cmd_new(args: argparse.Namespace) -> None:
         _apply_extra_fields(target, extra)
     else:
         # Top-level: find a matching ProducedDoc or ProducedDir
+        base = Path(args.directory).resolve() if args.directory else Path.cwd()
         file_path = Path(args.file)
         for phase in config.phases:
             for entry in phase.produces:
                 if isinstance(entry, ProducedDoc) and entry.file == args.file:
-                    target = Path(args.directory).resolve() / args.file
+                    target = base / args.file
                     _write_doc(entry, target, args.force)
                     _apply_extra_fields(target, extra)
                     return
                 if isinstance(entry, ProducedDir) and file_path.match(entry.dir):
-                    dir_target = Path(args.directory).resolve() / args.file
+                    dir_target = base / args.file
                     _write_dir(entry, dir_target, args.force)
                     for f in entry.files:
                         _apply_extra_fields(dir_target / f.file, extra)
@@ -285,7 +286,7 @@ def _cmd_set(args: argparse.Namespace) -> None:
 def _cmd_do(args: argparse.Namespace) -> None:
     config = _load_config()
     target = Path(args.target).resolve()
-    directory = target.parent
+    directory = Path.cwd()
 
     phase_before = engine.current_phase(config, directory)
 
