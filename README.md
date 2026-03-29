@@ -35,12 +35,13 @@ markstate status
 
 ### `init`
 
-Create a template `flow.yml` in the current directory:
+Create a `flow.yml` in the current directory:
 
 ```
-markstate init
-markstate init --force                 # overwrite existing
-markstate init .markstate/flow.yml     # hidden setup (see below)
+markstate init                                    # write built-in template
+markstate init examples/sdd/flow.yml              # copy from an existing flow.yml
+markstate init examples/sdd/flow.yml --hidden     # copy into .markstate/ (see below)
+markstate init --force                            # overwrite existing
 ```
 
 ### `new`
@@ -181,14 +182,14 @@ gate not satisfied:
 
 ## Trying it without visible marks
 
-To experiment without touching the repo visibly:
+To experiment without touching the repo visibly, point `init` at an existing `flow.yml` (a sample, a colleague's, a cloned example) and pass `--hidden`:
 
 ```
-markstate init .markstate/flow.yml
+markstate init path/to/flow.yml --hidden
 echo '.markstate/' >> .gitignore
 ```
 
-`init` creates the directory and prints a reminder to update `.gitignore`. All documents and the focus file land under `.markstate/` — one gitignore entry covers everything.
+`init --hidden` copies the file to `.markstate/flow.yml`, creates the directory, and prints a reminder to update `.gitignore`. All documents and the focus file land under `.markstate/` — one gitignore entry covers everything.
 
 If the experiment works and you want to share it, move `flow.yml` to the root and commit.
 
