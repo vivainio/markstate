@@ -75,6 +75,25 @@ def _read_focus(config: FlowConfig) -> Path | None:
     return None
 
 
+def _resolve_doc_base(config: FlowConfig) -> Path:
+    """Resolve the base directory for document operations (new, do).
+
+    Priority: cwd if inside docs_root → focus → error.
+    """
+    cwd = Path.cwd()
+    if config.docs_root in cwd.parents or cwd == config.docs_root:
+        return cwd
+    focus = _read_focus(config)
+    if focus:
+        return focus
+    print(
+        "error: not inside docs_root and no focus set — "
+        "run 'markstate focus <dir>' or cd into the target directory",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
 def _resolve_directory(args: argparse.Namespace, config: FlowConfig | None) -> Path:
     if args.directory:
         return Path(args.directory).resolve()
@@ -228,19 +247,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
         _apply_extra_fields(target, extra)
     else:
         # Top-level: find a matching ProducedDoc or ProducedDir
-        if args.directory:
-            base = Path(args.directory).resolve()
-        elif config.docs_root in cwd.parents or cwd == config.docs_root:
-            base = cwd  # already inside docs_root (e.g. a specific change dir)
-        else:
-            base = _read_focus(config)
-            if base is None:
-                print(
-                    "error: not inside docs_root and no focus set — "
-                    "run 'markstate focus <dir>' or cd into the target directory",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
+        base = Path(args.directory).resolve() if args.directory else _resolve_doc_base(config)
         target_path = (base / args.file).resolve()
         if config.docs_root not in target_path.parents and target_path != config.docs_root:
             print(
@@ -336,8 +343,9 @@ def _cmd_set(args: argparse.Namespace) -> None:
 
 def _cmd_do(args: argparse.Namespace) -> None:
     config = _load_config()
-    target = Path(args.target).resolve()
-    directory = Path.cwd()
+    base = _resolve_doc_base(config)
+    target = (base / args.target).resolve()
+    directory = base
 
     phase_before = engine.current_phase(config, directory)
 
