@@ -8,6 +8,11 @@ import yaml
 
 
 _TASK_RE = re.compile(r'^(\s*-\s+\[)([ xX])(\]\s+)(.*)', re.MULTILINE)
+_COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
+
+
+def _strip_comments(text: str) -> str:
+    return _COMMENT_RE.sub('', text)
 
 
 DELIMITER = "---"
@@ -31,7 +36,7 @@ class Document:
 
 def count_tasks(text: str) -> tuple[int, int]:
     """Return (done, total) checkbox task counts."""
-    matches = _TASK_RE.findall(text)
+    matches = _TASK_RE.findall(_strip_comments(text))
     total = len(matches)
     done = sum(1 for _, mark, _, _ in matches if mark.lower() == "x")
     return done, total
@@ -39,7 +44,7 @@ def count_tasks(text: str) -> tuple[int, int]:
 
 def next_unchecked_task(text: str) -> str | None:
     """Return the text of the first unchecked task, or None."""
-    for m in _TASK_RE.finditer(text):
+    for m in _TASK_RE.finditer(_strip_comments(text)):
         if m.group(2) == " ":
             return m.group(4)
     return None
@@ -52,6 +57,12 @@ def check_task(text: str, substring: str) -> tuple[str, str] | None:
     """
     for m in _TASK_RE.finditer(text):
         if m.group(2) == " " and substring.lower() in m.group(4).lower():
+            # Verify this match is not inside a comment
+            before = text[: m.start()]
+            open_comments = before.count("<!--")
+            close_comments = before.count("-->")
+            if open_comments > close_comments:
+                continue
             task_text = m.group(4)
             new_text = text[: m.start(2)] + "x" + text[m.end(2) :]
             return new_text, task_text

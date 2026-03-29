@@ -139,3 +139,28 @@ def test_check_task_first_match_only():
     assert result is not None
     _, task = result
     assert task == "Task alpha"
+
+
+# --- HTML comment stripping ---
+
+COMMENT_BODY = (
+    "<!-- Example:\n"
+    "- [ ] ignored 1\n"
+    "- [ ] ignored 2\n"
+    "- [ ] ignored 3\n"
+    "-->\n"
+    "\n"
+    "- [x] real task\n"
+)
+
+
+def test_count_tasks_ignores_html_comments():
+    assert count_tasks(COMMENT_BODY) == (1, 1)
+
+
+def test_next_unchecked_task_ignores_html_comments():
+    assert next_unchecked_task(COMMENT_BODY) is None
+
+
+def test_check_task_ignores_html_comments():
+    assert check_task(COMMENT_BODY, "ignored") is None
