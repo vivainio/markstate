@@ -409,6 +409,11 @@ def _cmd_status(args: argparse.Namespace) -> None:
     if config:
         result = engine.status(config, directory)
         phase = result["current_phase"]
+        try:
+            display_dir = directory.relative_to(Path.cwd())
+        except ValueError:
+            display_dir = directory
+        print(f"directory: {display_dir}")
         print(f"current phase: {phase or '(complete)'}")
         print()
 

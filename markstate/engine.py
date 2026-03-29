@@ -119,7 +119,10 @@ def status(config: FlowConfig, directory: Path) -> dict[str, object]:
             {
                 "name": p.name,
                 "gates_pass": _all_pass(p.gates, config, directory),
-                "complete": _all_pass(p.advance_when, config, directory),
+                "complete": (
+                    _all_pass(p.gates, config, directory)
+                    and _all_pass(p.advance_when, config, directory)
+                ),
             }
             for p in config.phases
         ],
