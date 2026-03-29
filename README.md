@@ -27,8 +27,8 @@ pip install markstate
 # Install the CLI
 pip install markstate
 
-# Install the skills into Claude Code
-uvx skillset add vivainio/markstate
+# Install the sdd skill into Claude Code
+uvx skillset add vivainio/markstate -s sdd
 
 # Bootstrap a hidden SDD workflow — nothing visible in the repo until you're ready
 markstate init https://raw.githubusercontent.com/vivainio/markstate/main/examples/sdd/flow.yml --hidden
