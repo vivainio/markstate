@@ -16,8 +16,11 @@ from markstate.engine import TaskNotFoundError, TransitionError
 
 
 FOCUS_FILE = ".markstate-focus"
+FOCUS_ENV_VAR = "MARKSTATE_FOCUS"
 
 _PRED_RE = re.compile(r'^([a-zA-Z0-9_-]+)(>=|<=|!=|~=|>|<|=)(.+)$')
+
+_focus_override: str | None = None
 
 
 def _resolve_magic(value: str) -> str:
@@ -68,6 +71,11 @@ def _try_load_config() -> FlowConfig | None:
 
 
 def _read_focus(config: FlowConfig) -> Path | None:
+    if _focus_override is not None:
+        p = Path(_focus_override)
+        if not p.is_absolute():
+            p = (config.docs_root / p).resolve()
+        return p
     focus_file = config.root / FOCUS_FILE
     if focus_file.exists():
         rel = focus_file.read_text().strip()
@@ -629,6 +637,10 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {version('markstate')}"
     )
+    parser.add_argument(
+        "--focus", metavar="DIR",
+        help="Override the active focus directory (also: MARKSTATE_FOCUS env var).",
+    )
 
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
@@ -711,9 +723,16 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    import os
+    global _focus_override
     config = _try_load_config()
     parser = _build_parser(config)
     args = parser.parse_args()
+
+    if args.focus:
+        _focus_override = args.focus
+    elif os.environ.get(FOCUS_ENV_VAR):
+        _focus_override = os.environ[FOCUS_ENV_VAR]
 
     if args.command is None:
         parser.print_help()

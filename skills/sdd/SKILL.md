@@ -4,7 +4,7 @@ description: Spec-driven development with markstate. Write a proposal, write a s
 ---
 
 Minimal spec-driven development workflow using markstate.
-Each change lives in its own directory with a `flow.yml` tracking four phases:
+Each change lives in `changes/<name>/` with a `flow.yml` tracking four phases:
 **drafting → speccing → implementing → done**.
 
 **When in doubt:** run `markstate status` to see the current phase and file states, then `markstate next` to see what transitions are available.
@@ -12,26 +12,19 @@ Each change lives in its own directory with a `flow.yml` tracking four phases:
 **Setup (once per project)**
 
 ```
-mkdir specs
-cp <markstate-examples>/sdd/flow.yml flow.yml   # or sdd/flow.yml if keeping it contained
+cp <markstate-examples>/sdd/flow.yml flow.yml
 ```
 
-**Starting a new spec**
+**Starting a new change**
 
 ```
-mkdir specs/PROJ-123.add-auth
+markstate new changes/PROJ-123.add-auth
 markstate focus PROJ-123.add-auth
 ```
 
 **Phase 1 — Drafting**
 
-Create the proposal document:
-
-```
-markstate new proposal.md
-```
-
-Fill in the **Problem** and **Solution** sections. Keep it brief — the proposal captures intent, not design. When satisfied:
+`proposal.md` is created automatically inside the new directory. Fill in the **Problem** and **Solution** sections. Keep it brief — the proposal captures intent, not design. When satisfied:
 
 ```
 markstate do accept proposal.md

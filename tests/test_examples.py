@@ -24,75 +24,74 @@ def run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
 
 def test_sdd_full_workflow(tmp_path):
     shutil.copy(EXAMPLES_DIR / "sdd" / "flow.yml", tmp_path / "flow.yml")
-    specs = tmp_path / "specs"
-    specs.mkdir()
+
+    # create the change directory — proposal.md is auto-populated
+    result = run(["new", "changes/PROJ-1.add-feature"], tmp_path)
+    assert result.returncode == 0
+    change = tmp_path / "changes" / "PROJ-1.add-feature"
+    assert (change / "proposal.md").exists()
 
     # --- drafting phase ---
-    result = run(["new", "proposal.md"], specs)
-    assert result.returncode == 0
-    assert (specs / "proposal.md").exists()
-
-    result = run(["status"], specs)
+    result = run(["status"], change)
     assert result.returncode == 0
     assert "drafting" in result.stdout
 
     # accepting proposal advances to speccing and auto-creates spec.md
-    result = run(["do", "accept", "proposal.md"], specs)
+    result = run(["do", "accept", "proposal.md"], change)
     assert result.returncode == 0
     assert "accepted" in result.stdout
-    assert (specs / "spec.md").exists(), "spec.md should be auto-created on entering speccing"
+    assert (change / "spec.md").exists(), "spec.md should be auto-created on entering speccing"
 
     # --- speccing phase ---
-    result = run(["status"], specs)
+    result = run(["status"], change)
     assert "speccing" in result.stdout
 
     # gate: trying to skip ahead should still be in speccing
-    result = run(["check-gate", "implementing"], specs)
+    result = run(["check-gate", "implementing"], change)
     assert result.returncode == 1
 
     # accepting spec advances to implementing and auto-creates tasks.md
-    result = run(["do", "accept", "spec.md"], specs)
+    result = run(["do", "accept", "spec.md"], change)
     assert result.returncode == 0
     assert "accepted" in result.stdout
-    assert (specs / "tasks.md").exists(), "tasks.md should be auto-created on entering implementing"
+    assert (change / "tasks.md").exists(), "tasks.md should be auto-created on entering implementing"
 
     # --- implementing phase ---
-    result = run(["status"], specs)
+    result = run(["status"], change)
     assert "implementing" in result.stdout
 
     # replace placeholder with real tasks
-    (specs / "tasks.md").write_text("- [ ] Implement feature\n- [ ] Write tests\n")
+    (change / "tasks.md").write_text("- [ ] Implement feature\n- [ ] Write tests\n")
 
-    result = run(["check", "Implement feature"], specs)
+    result = run(["check", "Implement feature"], change)
     assert result.returncode == 0
     assert "1/2" in result.stdout
 
-    result = run(["check", "Write tests"], specs)
+    result = run(["check", "Write tests"], change)
     assert result.returncode == 0
     assert "2/2" in result.stdout
     assert "(complete)" in result.stdout
 
     # --- done phase ---
-    result = run(["status"], specs)
+    result = run(["status"], change)
     assert "done" in result.stdout
 
 
 def test_sdd_reopen_blocks_advance(tmp_path):
     """Reopening an accepted proposal should block phase advancement."""
     shutil.copy(EXAMPLES_DIR / "sdd" / "flow.yml", tmp_path / "flow.yml")
-    specs = tmp_path / "specs"
-    specs.mkdir()
 
-    run(["new", "proposal.md"], specs)
-    run(["do", "accept", "proposal.md"], specs)
+    run(["new", "changes/PROJ-1.add-feature"], tmp_path)
+    change = tmp_path / "changes" / "PROJ-1.add-feature"
+    run(["do", "accept", "proposal.md"], change)
 
     # reopen drops proposal back to draft
-    result = run(["do", "reopen", "proposal.md"], specs)
+    result = run(["do", "reopen", "proposal.md"], change)
     assert result.returncode == 0
     assert "draft" in result.stdout
 
     # now gate for speccing should fail
-    result = run(["check-gate", "speccing"], specs)
+    result = run(["check-gate", "speccing"], change)
     assert result.returncode == 1
 
 

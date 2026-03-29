@@ -1,27 +1,27 @@
-# Minimal spec-driven development flow. Place this at the project root or a
-# dedicated specs directory. docs_root points to where the specs live.
-# Use `markstate focus PROJ-123.add-auth` to work on a specific spec.
-
-docs_root: specs
+# Minimal spec-driven development flow. Place this at the project root.
+# Use `markstate new changes/PROJ-123.add-auth` to start a new change.
+# Use `markstate focus PROJ-123.add-auth` to work on a specific change.
 
 phases:
   - name: drafting
     produces:
-      - file: proposal.md
-        template: |
-          ---
-          status: draft
-          ---
+      - dir: changes/*
+        files:
+          - file: proposal.md
+            template: |
+              ---
+              status: draft
+              ---
 
-          # Proposal
+              # Proposal
 
-          ## Problem
+              ## Problem
 
-          <!-- What is broken or missing? -->
+              <!-- What is broken or missing? -->
 
-          ## Solution
+              ## Solution
 
-          <!-- How will you fix it? -->
+              <!-- How will you fix it? -->
     advance_when:
       - file: proposal.md
         status: accepted
