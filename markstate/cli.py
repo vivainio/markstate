@@ -267,15 +267,12 @@ def _cmd_new(args: argparse.Namespace) -> None:
         _write_doc(produced, target, args.force)
         _apply_extra_fields(target, extra)
     else:
-        # Top-level: find a matching ProducedDoc or ProducedDir
-        base = Path(args.directory).resolve() if args.directory else _resolve_doc_base(config)
-        target_path = (base / args.file).resolve()
-        if config.docs_root not in target_path.parents and target_path != config.docs_root:
-            print(
-                f"error: '{target_path}' is outside docs_root ({config.docs_root})",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+        # Top-level: resolve base from cwd (if inside docs_root) or focus.
+        # Both ProducedDoc and ProducedDir use the same base so that instance-level
+        # dirs (e.g. specs/* inside a change dir) resolve relative to the active change,
+        # while top-level dirs (e.g. changes/* at docs_root) work when cwd == docs_root.
+        explicit_base = Path(args.directory).resolve() if args.directory else None
+        base = explicit_base or _resolve_doc_base(config)
         file_path = Path(args.file)
         for phase in config.phases:
             for entry in phase.produces:
