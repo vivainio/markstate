@@ -110,6 +110,26 @@ def test_status_shows_task_counts(tmp_path):
     assert "1/2" in result.stdout
 
 
+def test_status_shows_docs_root_when_redirect(tmp_path):
+    docs_repo = tmp_path / "docs-repo"
+    source_repo = tmp_path / "source-repo"
+    docs_repo.mkdir()
+    source_repo.mkdir()
+
+    (docs_repo / "flow.yml").write_text(SIMPLE_FLOW)
+    (source_repo / "flow.yml").write_text(f"redirect: ../docs-repo/flow.yml\n")
+
+    result = run(["status"], source_repo)
+    assert result.returncode == 0
+    assert str(docs_repo) in result.stdout
+
+
+def test_status_no_docs_root_header_when_local(tmp_path):
+    setup_flow(tmp_path)
+    result = run(["status"], tmp_path)
+    assert "docs_root:" not in result.stdout
+
+
 # --- do ---
 
 

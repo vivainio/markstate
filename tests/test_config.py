@@ -58,6 +58,24 @@ def test_find_not_found(tmp_path):
         find_and_load(tmp_path)
 
 
+def test_redirect_loads_target(tmp_path):
+    docs_repo = tmp_path / "docs-repo"
+    source_repo = tmp_path / "source-repo"
+    docs_repo.mkdir()
+    source_repo.mkdir()
+
+    (docs_repo / "flow.yml").write_text(
+        "docs_root: changes\nphases: []\ntransitions: []\n"
+    )
+    (source_repo / "flow.yml").write_text(
+        f"redirect: ../docs-repo/flow.yml\n"
+    )
+
+    cfg = find_and_load(source_repo)
+    assert cfg.docs_root == (docs_repo / "changes").resolve()
+    assert cfg.phases == []
+
+
 def test_status_field_custom(tmp_path):
     write_flow(tmp_path, "status_field: state\nphases: []\ntransitions: []\n")
     cfg = find_and_load(tmp_path)

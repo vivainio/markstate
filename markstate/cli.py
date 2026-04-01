@@ -434,10 +434,10 @@ def _cmd_status(args: argparse.Namespace) -> None:
     if config:
         result = engine.status(config, directory)
         phase = result["current_phase"]
+        if not config.docs_root.is_relative_to(Path.cwd()):
+            print(f"docs_root: {config.docs_root}")
         try:
             display_dir = directory.relative_to(config.docs_root)
-            if not config.docs_root.is_relative_to(Path.cwd()):
-                print(f"docs_root: {config.docs_root}")
         except ValueError:
             display_dir = directory
         print(f"directory: {display_dir}")
