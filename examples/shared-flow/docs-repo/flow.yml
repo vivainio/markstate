@@ -1,0 +1,45 @@
+# Canonical flow definition, maintained in the docs/tooling repo.
+# Source repos reference this via a redirect stub.
+
+docs_root: changes
+
+phases:
+  - name: drafting
+    produces:
+      - file: proposal.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Proposal
+    advance_when:
+      - file: proposal.md
+        status: accepted
+
+  - name: implementing
+    gates:
+      - file: proposal.md
+        status: accepted
+    produces:
+      - file: tasks.md
+        template: |
+          # Tasks
+          - [ ]
+        auto: true
+    advance_when:
+      - file: tasks.md
+        tasks: all_done
+
+  - name: done
+    gates:
+      - file: tasks.md
+        tasks: all_done
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+  - name: reopen
+    from: accepted
+    to: draft

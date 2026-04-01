@@ -1,0 +1,3 @@
+# Redirect to the canonical flow in the shared docs repo.
+# Adjust the path to match your local checkout layout.
+redirect: ../docs-repo/flow.yml

@@ -12,6 +12,7 @@ Ready-made flows and agent skills are in [`examples/`](examples/) and [`skills/`
 |---|---|
 | [`examples/sdd/`](examples/sdd/) | Spec-driven development: proposal → spec → tasks → done |
 | [`examples/openspec/`](examples/openspec/) | [OpenSpec](https://github.com/Fission-AI/OpenSpec)-style: proposal + design agreed upfront, then tasks |
+| [`examples/shared-flow/`](examples/shared-flow/) | Multi-repo setup: canonical `flow.yml` in a docs repo, redirect stub in source repos |
 
 Each example includes a `flow.yml` to place at the root of your change collection (e.g. `specs/flow.yml`) and a matching skill in `skills/` to guide an AI agent through the workflow.
 
@@ -282,6 +283,19 @@ produces:
 | `name` | Transition name (used with `markstate do`) |
 | `from` | Required current status |
 | `to` | New status after applying the transition |
+
+## Sharing a flow across multiple repos
+
+When several source repos follow the same workflow, keep one canonical `flow.yml` in a shared docs or tooling repo and put a one-line redirect stub in each source repo. A symlink to `flow.yml` would also work, but a redirect stub is more reliable — it survives clones, CI environments, and Windows checkouts where symlinks are often broken.
+
+```yaml
+# source-repo/flow.yml
+redirect: ../docs-repo/flow.yml
+```
+
+The path is resolved relative to the stub's location. `docs_root` and all other settings come from the target file, so documents land in the docs repo's directory tree.
+
+See [`examples/shared-flow/`](examples/shared-flow/) for a working layout.
 
 ## Minimal flow without config
 

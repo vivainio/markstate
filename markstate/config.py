@@ -84,6 +84,9 @@ def _find(start: Path) -> Path | None:
 
 def _load(path: Path) -> FlowConfig:
     raw = yaml.safe_load(path.read_text())
+    if "redirect" in raw:
+        target = (path.parent / raw["redirect"]).resolve()
+        return _load(target)
 
     phases = [_parse_phase(p) for p in raw.get("phases", [])]
     transitions = [_parse_transition(t) for t in raw.get("transitions", [])]
