@@ -273,10 +273,19 @@ def _cmd_new(args: argparse.Namespace) -> None:
         _apply_extra_fields(target, extra)
         return
 
-    # Resolve path relative to docs_root
+    # Resolve path relative to docs_root.
+    # Use cwd when inside docs_root (e.g. cd'd into a change dir with a bare
+    # filename), otherwise always fall back to docs_root — never use focus,
+    # which would cause nested paths.
     explicit_base = Path(args.directory).resolve() if args.directory else None
-    base = explicit_base or _resolve_doc_base(config)
-    resolved = base / args.file
+    if explicit_base is None:
+        if config.docs_root in cwd.parents or cwd == config.docs_root:
+            base = cwd
+        else:
+            base = config.docs_root
+    else:
+        base = explicit_base
+    resolved = (base / args.file).resolve()
     if not resolved.is_relative_to(config.docs_root):
         print(f"error: '{args.file}' resolves outside docs_root", file=sys.stderr)
         sys.exit(1)
