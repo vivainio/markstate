@@ -52,19 +52,37 @@ def do_transition(transition_name: str, target: Path, config: FlowConfig) -> tup
 
 
 def find_dir_template(config: FlowConfig, cwd: Path) -> tuple[Path, ProducedDir] | tuple[None, None]:
-    """Walk up from cwd toward config.docs_root to find a matching dir template."""
+    """Find the dir template matching cwd by comparing its path relative to docs_root against all dir patterns."""
     if not cwd.is_relative_to(config.docs_root):
         return None, None
-    candidate = cwd
-    while candidate != config.docs_root:
-        task_dir = candidate.parent
-        rel = cwd.relative_to(task_dir)
-        for phase in config.phases:
-            for entry in phase.produces:
-                if isinstance(entry, ProducedDir) and rel.match(entry.dir):
-                    return task_dir, entry
-        candidate = task_dir
-    return None, None
+    rel = cwd.relative_to(config.docs_root)
+    best: tuple[ProducedDir, int] | None = None
+    for phase in config.phases:
+        for entry in phase.produces:
+            if isinstance(entry, ProducedDir) and rel.match(entry.glob_pattern):
+                # Prefer the most specific (longest) pattern
+                depth = entry.dir.count("/")
+                if best is None or depth > best[1]:
+                    best = (entry, depth)
+    if best is None:
+        return None, None
+    entry = best[0]
+    # base is the parent that the dir pattern is relative to (always docs_root)
+    return config.docs_root, entry
+
+
+def collect_dir_files(config: FlowConfig, dir_pattern: str) -> list[ProducedDoc]:
+    """Collect all files from all phases that share the same dir pattern."""
+    seen: set[str] = set()
+    result: list[ProducedDoc] = []
+    for phase in config.phases:
+        for entry in phase.produces:
+            if isinstance(entry, ProducedDir) and entry.dir == dir_pattern:
+                for f in entry.files:
+                    if f.file not in seen:
+                        seen.add(f.file)
+                        result.append(f)
+    return result
 
 
 def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
@@ -85,9 +103,11 @@ def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, obje
                 "missing": False,
             })
 
-    task_dir, dir_entry = find_dir_template(config, directory)
+    # Show missing files from the current dir template (if inside one)
+    _, dir_entry = find_dir_template(config, directory)
     if dir_entry:
-        for f in dir_entry.files:
+        all_files = collect_dir_files(config, dir_entry.dir)
+        for f in all_files:
             if not (directory / f.file).exists():
                 results.append({
                     "file": f.file,
@@ -95,16 +115,29 @@ def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, obje
                     "transitions": [],
                     "missing": True,
                 })
-    else:
-        phase = current_phase(config, directory)
-        if phase:
-            for doc in phase.produces:
-                if isinstance(doc, ProducedDoc) and not (directory / doc.file).exists():
+
+    # Show missing produced docs/dirs from the current phase
+    phase = current_phase(config, directory)
+    if phase:
+        for entry in phase.produces:
+            if isinstance(entry, ProducedDoc) and not dir_entry:
+                if not (directory / entry.file).exists():
                     results.append({
-                        "file": doc.file,
+                        "file": entry.file,
                         "status": None,
                         "transitions": [],
                         "missing": True,
+                    })
+            elif isinstance(entry, ProducedDir) and entry.dir != (dir_entry.dir if dir_entry else None):
+                existing = list(config.docs_root.glob(entry.glob_pattern))
+                under_dir = [d for d in existing if d.is_dir() and d.is_relative_to(directory)]
+                if not under_dir:
+                    results.append({
+                        "file": entry.dir,
+                        "status": None,
+                        "transitions": [],
+                        "missing": True,
+                        "hint": f"markstate new {entry.dir}",
                     })
 
     return results

@@ -1,11 +1,23 @@
-# Minimal spec-driven development flow. Place this at the project root.
-# Use `markstate new changes/PROJ-123.add-auth` to start a new change.
-# Use `markstate focus PROJ-123.add-auth` to work on a specific change.
+# Spec-driven development with changes grouped by area.
+# Use `markstate new changes/auth/add-oauth` to start a new change.
+# Use `markstate focus add-oauth` to work on a specific change.
+#
+# Directory layout:
+#   changes/
+#     auth/
+#       add-oauth/
+#         proposal.md
+#         spec.md
+#         tasks.md
+#     billing/
+#       fix-invoices/
+#         proposal.md
+#         ...
 
 phases:
   - name: drafting
     produces:
-      - dir: changes/<change>
+      - dir: changes/<area>/<change>
         files:
           - file: proposal.md
             template: |

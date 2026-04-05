@@ -49,7 +49,7 @@ phases:
           ## Affected areas
 
           <!-- Files, modules, APIs, or systems that will change. -->
-      - dir: specs/*
+      - dir: "<change>/specs/<area>"
         files:
           - file: spec.md
             template: |

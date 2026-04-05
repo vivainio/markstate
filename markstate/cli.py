@@ -168,7 +168,7 @@ phases:
 
   - name: review
     produces:
-      - dir: specs/*
+      - dir: specs/<name>
         files:
           - file: functional-spec.md
             template: |
@@ -253,42 +253,62 @@ def _cmd_new(args: argparse.Namespace) -> None:
     cwd = Path.cwd()
     extra = _parse_set_args(args.set)
 
+    # Resolve the target path relative to docs_root.
+    # If inside a dir template (cd'd into a change dir), a bare filename
+    # resolves via cwd. Otherwise, resolve via explicit --dir, focus, or cwd.
+    file_path = Path(args.file)
     _, dir_entry = engine.find_dir_template(config, cwd)
 
-    if dir_entry:
-        # Inside a dir template: create a single file within cwd
-        produced = next((f for f in dir_entry.files if f.file == args.file), None)
+    if dir_entry and "/" not in args.file:
+        # Bare filename inside a dir template: create file in cwd
+        all_files = {f.file: f for f in engine.collect_dir_files(config, dir_entry.dir)}
+        produced = all_files.get(args.file)
         if produced is None:
-            available = [f.file for f in dir_entry.files]
+            available = list(all_files.keys())
             print(f"error: '{args.file}' is not in this dir template. "
                   f"Available: {', '.join(available)}", file=sys.stderr)
             sys.exit(1)
         target = cwd / args.file
         _write_doc(produced, target, args.force)
         _apply_extra_fields(target, extra)
-    else:
-        # Top-level: resolve base from cwd (if inside docs_root) or focus.
-        # Both ProducedDoc and ProducedDir use the same base so that instance-level
-        # dirs (e.g. specs/* inside a change dir) resolve relative to the active change,
-        # while top-level dirs (e.g. changes/* at docs_root) work when cwd == docs_root.
-        explicit_base = Path(args.directory).resolve() if args.directory else None
-        base = explicit_base or _resolve_doc_base(config)
-        file_path = Path(args.file)
-        for phase in config.phases:
-            for entry in phase.produces:
-                if isinstance(entry, ProducedDoc) and entry.file == args.file:
-                    target = base / args.file
-                    _write_doc(entry, target, args.force)
-                    _apply_extra_fields(target, extra)
-                    return
-                if isinstance(entry, ProducedDir) and file_path.match(entry.dir):
-                    dir_target = base / args.file
-                    _write_dir(entry, dir_target, args.force)
-                    for f in entry.files:
-                        _apply_extra_fields(dir_target / f.file, extra)
-                    return
-        print(f"error: '{args.file}' does not match any produces entry", file=sys.stderr)
+        return
+
+    # Resolve path relative to docs_root
+    explicit_base = Path(args.directory).resolve() if args.directory else None
+    base = explicit_base or _resolve_doc_base(config)
+    resolved = base / args.file
+    if not resolved.is_relative_to(config.docs_root):
+        print(f"error: '{args.file}' resolves outside docs_root", file=sys.stderr)
         sys.exit(1)
+    rel = resolved.relative_to(config.docs_root)
+
+    # Try matching against all producible paths
+    for phase in config.phases:
+        for entry in phase.produces:
+            if isinstance(entry, ProducedDoc) and entry.file == args.file:
+                target = base / args.file
+                _write_doc(entry, target, args.force)
+                _apply_extra_fields(target, extra)
+                return
+            if isinstance(entry, ProducedDir) and rel.match(entry.glob_pattern):
+                _write_dir_files(entry.files, resolved, args.force)
+                for f in entry.files:
+                    _apply_extra_fields(resolved / f.file, extra)
+                return
+    # Collect all producible patterns for the hint
+    hints = []
+    for phase in config.phases:
+        for entry in phase.produces:
+            if isinstance(entry, ProducedDoc):
+                hints.append(entry.file)
+            elif isinstance(entry, ProducedDir):
+                hints.append(entry.dir)
+    print(f"error: '{args.file}' does not match any produces entry", file=sys.stderr)
+    if hints:
+        seen = set()
+        unique = [h for h in hints if h not in seen and not seen.add(h)]
+        print(f"hint: expected one of: {', '.join(unique)}", file=sys.stderr)
+    sys.exit(1)
 
 
 def _write_doc(doc: ProducedDoc, target: Path, force: bool) -> None:
@@ -303,24 +323,41 @@ def _write_doc(doc: ProducedDoc, target: Path, force: bool) -> None:
     print(f"created {target.name}")
 
 
-def _write_dir(entry: ProducedDir, target: Path, force: bool) -> None:
+def _write_dir_files(files: list[ProducedDoc], target: Path, force: bool) -> None:
     if target.exists() and not force:
         print(f"error: '{target}' already exists. Use --force to overwrite.", file=sys.stderr)
         sys.exit(1)
     target.mkdir(parents=True, exist_ok=True)
-    for f in entry.files:
+    for f in files:
         _write_doc(f, target / f.file, force)
 
 
-def _create_auto_docs(phase: Phase, directory: Path) -> None:
-    for doc in phase.produces:
-        if not isinstance(doc, ProducedDoc) or not doc.auto or doc.template is None:
-            continue
-        dest = directory / doc.file
-        if not dest.exists():
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(doc.template)
-            print(f"created {dest.relative_to(Path.cwd())}")
+def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None:
+    for entry in phase.produces:
+        if isinstance(entry, ProducedDoc):
+            if not entry.auto or entry.template is None:
+                continue
+            dest = directory / entry.file
+            if not dest.exists():
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(entry.template)
+                print(f"created {dest.relative_to(Path.cwd())}")
+        elif isinstance(entry, ProducedDir):
+            # Auto-create files inside existing directories matching the pattern.
+            # Glob from docs_root, but only in dirs under the current directory.
+            for existing_dir in sorted(config.docs_root.glob(entry.glob_pattern)):
+                if not existing_dir.is_dir():
+                    continue
+                if not existing_dir.is_relative_to(directory):
+                    continue
+                for f in entry.files:
+                    if not f.auto or f.template is None:
+                        continue
+                    dest = existing_dir / f.file
+                    if not dest.exists():
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(f.template)
+                        print(f"created {dest.relative_to(Path.cwd())}")
 
 
 def _report_transition(
@@ -338,7 +375,7 @@ def _report_transition(
         engine.find_entered_phase(config, directory) if phase_before is not None else None
     )
     if docs_phase:
-        _create_auto_docs(docs_phase, directory)
+        _create_auto_docs(docs_phase, config, directory)
 
 
 def _cmd_set(args: argparse.Namespace) -> None:
@@ -363,8 +400,11 @@ def _cmd_do(args: argparse.Namespace) -> None:
     config = _load_config()
     directory = _resolve_doc_base(config)
     target = _resolve_file(args.target, config)
+    # Evaluate phase relative to the document's parent directory context.
+    # For files inside a focused change dir, use focus; otherwise use directory.
+    phase_dir = _read_focus(config) or directory
 
-    phase_before = engine.current_phase(config, directory)
+    phase_before = engine.current_phase(config, phase_dir)
 
     try:
         old, new = engine.do_transition(args.transition_name, target, config)
@@ -375,8 +415,8 @@ def _cmd_do(args: argparse.Namespace) -> None:
 
     _apply_extra_fields(target, _parse_set_args(args.set))
 
-    phase_after = engine.current_phase(config, directory)
-    _report_transition(phase_before, phase_after, config, directory)
+    phase_after = engine.current_phase(config, phase_dir)
+    _report_transition(phase_before, phase_after, config, phase_dir)
 
 
 def _find_focus_dir(query: str, docs_root: Path) -> Path:
@@ -495,7 +535,8 @@ def _cmd_next(args: argparse.Namespace) -> None:
         transition_map = {t.name: t.to_state for t in config.transitions}
         for item in results:
             if item["missing"]:
-                print(f"  {item['file']:30s}  (not created)    → markstate new {item['file']}")
+                hint = item.get("hint", f"markstate new {item['file']}")
+                print(f"  {item['file']:30s}  (not created)    → {hint}")
             else:
                 transitions = ", ".join(
                     f"{t} (→ {transition_map[t]})" for t in item["transitions"]
@@ -516,7 +557,7 @@ def _cmd_next_task(args: argparse.Namespace) -> None:
     print(f"→ phase: {phase.name if phase else '(complete)'}")
     entered = engine.find_entered_phase(config, directory)
     if entered:
-        _create_auto_docs(entered, directory)
+        _create_auto_docs(entered, config, directory)
 
 
 def _eval_predicate(actual: object, op: str, value: str) -> bool:
@@ -614,7 +655,8 @@ def _new_metavar(config: FlowConfig | None) -> str:
     cwd = Path.cwd()
     _, dir_entry = engine.find_dir_template(config, cwd)
     if dir_entry:
-        missing = [f.file for f in dir_entry.files if not (cwd / f.file).exists()]
+        all_files = engine.collect_dir_files(config, dir_entry.dir)
+        missing = [f.file for f in all_files if not (cwd / f.file).exists()]
         return "[" + "|".join(missing) + "]" if missing else "FILE"
     items = []
     for phase in config.phases:
@@ -622,7 +664,7 @@ def _new_metavar(config: FlowConfig | None) -> str:
             if isinstance(entry, ProducedDoc):
                 items.append(entry.file)
             elif isinstance(entry, ProducedDir):
-                items.append(entry.dir.replace("*", "<name>"))
+                items.append(entry.dir)
     return "[" + "|".join(items) + "]" if items else "FILE"
 
 

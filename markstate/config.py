@@ -2,8 +2,14 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 
 import yaml
+
+
+def _to_glob(pattern: str) -> str:
+    """Convert a dir pattern with <name> placeholders to a glob pattern."""
+    return re.sub(r"<[^>]+>", "*", pattern)
 
 
 CONFIG_FILENAME = "flow.yml"
@@ -37,6 +43,10 @@ class ProducedDoc:
 class ProducedDir:
     dir: str
     files: list[ProducedDoc] = field(default_factory=list)
+
+    @property
+    def glob_pattern(self) -> str:
+        return _to_glob(self.dir)
 
 
 @dataclass
