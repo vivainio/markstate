@@ -273,37 +273,43 @@ def _cmd_new(args: argparse.Namespace) -> None:
         _apply_extra_fields(target, extra)
         return
 
-    # Resolve path relative to docs_root.
-    # Use cwd when inside docs_root (e.g. cd'd into a change dir with a bare
-    # filename), otherwise always fall back to docs_root — never use focus,
-    # which would cause nested paths.
+    # Build candidate base directories to try, in priority order.
+    # Try focus/cwd first (so relative paths like specs/foo work),
+    # then docs_root (so full paths like changes/area/name work).
     explicit_base = Path(args.directory).resolve() if args.directory else None
-    if explicit_base is None:
-        if config.docs_root in cwd.parents or cwd == config.docs_root:
-            base = cwd
-        else:
-            base = config.docs_root
+    if explicit_base is not None:
+        candidates = [explicit_base]
     else:
-        base = explicit_base
-    resolved = (base / args.file).resolve()
-    if not resolved.is_relative_to(config.docs_root):
-        print(f"error: '{args.file}' resolves outside docs_root", file=sys.stderr)
-        sys.exit(1)
-    rel = resolved.relative_to(config.docs_root)
+        candidates = []
+        if config.docs_root in cwd.parents or cwd == config.docs_root:
+            candidates.append(cwd)
+        # Try docs_root before focus: a path like "changes/area/name"
+        # should resolve against docs_root, not nest under focus.
+        # Focus is only useful for relative sub-paths like "specs/foo".
+        if config.docs_root not in candidates:
+            candidates.append(config.docs_root)
+        focus = _read_focus(config)
+        if focus and focus not in candidates:
+            candidates.append(focus)
 
-    # Try matching against all producible paths
-    for phase in config.phases:
-        for entry in phase.produces:
-            if isinstance(entry, ProducedDoc) and entry.file == args.file:
-                target = base / args.file
-                _write_doc(entry, target, args.force)
-                _apply_extra_fields(target, extra)
-                return
-            if isinstance(entry, ProducedDir) and rel.match(entry.glob_pattern):
-                _write_dir_files(entry.files, resolved, args.force)
-                for f in entry.files:
-                    _apply_extra_fields(resolved / f.file, extra)
-                return
+    # Try each candidate base: resolve the path, check it's inside docs_root,
+    # and see if it matches a produces pattern.
+    for base in candidates:
+        resolved = (base / args.file).resolve()
+        if not resolved.is_relative_to(config.docs_root):
+            continue
+        rel = resolved.relative_to(config.docs_root)
+        for phase in config.phases:
+            for entry in phase.produces:
+                if isinstance(entry, ProducedDoc) and entry.file == args.file:
+                    _write_doc(entry, resolved, args.force)
+                    _apply_extra_fields(resolved, extra)
+                    return
+                if isinstance(entry, ProducedDir) and rel.match(entry.glob_pattern):
+                    _write_dir_files(entry.files, resolved, args.force)
+                    for f in entry.files:
+                        _apply_extra_fields(resolved / f.file, extra)
+                    return
     # Collect all producible patterns for the hint
     hints = []
     for phase in config.phases:
