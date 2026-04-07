@@ -57,6 +57,19 @@ class Phase:
     advance_when: list[Condition] = field(default_factory=list)
 
 
+_DEFAULT_EXCLUDE_DIRS = {"node_modules", ".git", "__pycache__", ".venv", "venv"}
+
+
+def filtered_rglob(directory: Path, pattern: str, exclude_dirs: set[str] | None = None) -> list[Path]:
+    """Like Path.rglob but skips excluded directory names."""
+    if exclude_dirs is None:
+        exclude_dirs = _DEFAULT_EXCLUDE_DIRS
+    return sorted(
+        p for p in directory.rglob(pattern)
+        if not (exclude_dirs & set(p.relative_to(directory).parts))
+    )
+
+
 @dataclass
 class FlowConfig:
     root: Path
@@ -64,6 +77,7 @@ class FlowConfig:
     status_field: str
     phases: list[Phase]
     transitions: list[Transition]
+    exclude_dirs: set[str] = field(default_factory=lambda: set(_DEFAULT_EXCLUDE_DIRS))
 
     def transition(self, name: str) -> Transition | None:
         return next((t for t in self.transitions if t.name == name), None)
@@ -108,12 +122,18 @@ def _load(path: Path) -> FlowConfig:
     else:
         docs_root = config_dir
 
+    exclude_dirs = set(_DEFAULT_EXCLUDE_DIRS)
+    extra = raw.get("exclude_dirs")
+    if extra:
+        exclude_dirs.update(extra)
+
     return FlowConfig(
         root=config_dir,
         docs_root=docs_root,
         status_field=raw.get("status_field", "status"),
         phases=phases,
         transitions=transitions,
+        exclude_dirs=exclude_dirs,
     )
 
 

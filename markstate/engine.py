@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from markstate import frontmatter
-from markstate.config import Condition, FlowConfig, Phase, ProducedDir, ProducedDoc, Transition
+from markstate.config import Condition, FlowConfig, Phase, ProducedDir, ProducedDoc, Transition, filtered_rglob
 
 
 class TransitionError(Exception):
@@ -89,7 +89,7 @@ def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, obje
     """Return actionable next steps: applicable transitions on existing docs, and missing produced docs."""
     results = []
 
-    for path in sorted(directory.rglob("*.md")):
+    for path in filtered_rglob(directory, "*.md", config.exclude_dirs):
         doc = frontmatter.load(path)
         current = str(doc.get(config.status_field) or "")
         if not current:
@@ -213,7 +213,7 @@ def find_entered_phase(config: FlowConfig, directory: Path) -> Phase | None:
 
 def next_task(config: FlowConfig, directory: Path) -> dict | None:
     """Return the first unchecked task found in any .md file under directory."""
-    for path in sorted(directory.rglob("*.md")):
+    for path in filtered_rglob(directory, "*.md", config.exclude_dirs):
         task = frontmatter.next_unchecked_task(path.read_text())
         if task:
             return {"file": str(path.relative_to(directory)), "task": task}
@@ -226,7 +226,7 @@ def check_task(substring: str, config: FlowConfig, directory: Path) -> dict:
     Returns {"file", "task", "done", "total"}.
     Raises TaskNotFoundError if no match.
     """
-    for path in sorted(directory.rglob("*.md")):
+    for path in filtered_rglob(directory, "*.md", config.exclude_dirs):
         result = frontmatter.check_task(path.read_text(), substring)
         if result:
             new_text, task_text = result

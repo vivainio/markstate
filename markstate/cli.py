@@ -11,7 +11,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 from markstate import engine, frontmatter
-from markstate.config import FlowConfig, Phase, ProducedDir, ProducedDoc, find_and_load
+from markstate.config import FlowConfig, Phase, ProducedDir, ProducedDoc, filtered_rglob, find_and_load
 from markstate.engine import TaskNotFoundError, TransitionError
 
 
@@ -122,6 +122,10 @@ def _resolve_directory(args: argparse.Namespace, config: FlowConfig | None) -> P
         focus = _read_focus(config)
         if focus:
             return focus
+        # If cwd is outside docs_root (e.g. redirect from another repo), use docs_root
+        cwd = Path.cwd()
+        if not cwd.is_relative_to(config.docs_root):
+            return config.docs_root
     return Path.cwd()
 
 
@@ -436,7 +440,7 @@ def _cmd_do(args: argparse.Namespace) -> None:
 
 def _find_focus_dir(query: str, docs_root: Path) -> Path:
     """Find a unique directory under docs_root whose name contains query as a substring."""
-    matches = [d for d in docs_root.rglob("*") if d.is_dir() and query in d.name]
+    matches = [d for d in filtered_rglob(docs_root, "*") if d.is_dir() and query in d.name]
     if not matches:
         print(f"error: no directory matching '{query}' found under {docs_root}", file=sys.stderr)
         sys.exit(1)
@@ -468,7 +472,8 @@ def _cmd_status(args: argparse.Namespace) -> None:
     status_field = config.status_field if config else "status"
 
     files = {}
-    for path in sorted(directory.rglob("*.md")):
+    exclude = config.exclude_dirs if config else None
+    for path in filtered_rglob(directory, "*.md", exclude):
         doc = frontmatter.load(path)
         s = doc.get(status_field)
         done, total = frontmatter.count_tasks(doc.body)
@@ -622,7 +627,8 @@ def _cmd_query(args: argparse.Namespace) -> None:
         predicates.append((m.group(1), m.group(2), m.group(3)))
 
     results: list[tuple[Path, frontmatter.Document]] = []
-    for path in sorted(root.rglob("*.md")):
+    exclude = config.exclude_dirs if config else None
+    for path in filtered_rglob(root, "*.md", exclude):
         doc = frontmatter.load(path)
         if all(
             doc.front_matter.get(field) is not None
