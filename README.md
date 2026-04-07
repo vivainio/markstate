@@ -67,6 +67,21 @@ markstate new specs/03-password-reset   # create a directory from a dir template
 
 When inside a directory matching a dir template (e.g. `specs/*`), shows only the files missing from that directory.
 
+`new` figures out where to create files by trying bases in this order: your current directory (if inside `docs_root`), then `docs_root`, then the focus directory. The first match against a `produces` pattern wins.
+
+```bash
+# Full paths resolve against docs_root — no matter where you are or what's focused:
+markstate new changes/auth/add-oauth          # → docs_root/changes/auth/add-oauth/
+
+# Short paths resolve against focus — handy for adding stories to the current change:
+markstate focus add-oauth
+markstate new specs/01-login                  # → docs_root/changes/auth/add-oauth/specs/01-login/
+
+# If you cd into docs_root, cwd takes priority:
+cd docs_root/changes/auth/add-oauth
+markstate new specs/02-logout                 # → cwd/specs/02-logout/
+```
+
 ### `set`
 
 Set the status of one or more documents directly, without a defined move. Works without `flow.yml`:
