@@ -440,7 +440,7 @@ def _cmd_do(args: argparse.Namespace) -> None:
 
 def _find_focus_dir(query: str, docs_root: Path) -> Path:
     """Find a unique directory under docs_root whose name contains query as a substring."""
-    matches = [d for d in filtered_rglob(docs_root, "*") if d.is_dir() and query in d.name]
+    matches = [d for d in filtered_rglob(docs_root, "*") if d.is_dir() and (query in d.name or query in str(d.relative_to(docs_root)))]
     if not matches:
         print(f"error: no directory matching '{query}' found under {docs_root}", file=sys.stderr)
         sys.exit(1)
