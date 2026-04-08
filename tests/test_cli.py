@@ -256,6 +256,20 @@ def test_focus_fuzzy_ambiguous(tmp_path):
     assert "ambiguous" in result.stderr
 
 
+def test_focus_exact_path_over_substring(tmp_path):
+    """When query matches a relative path exactly, don't also match subdirs."""
+    setup_flow(tmp_path)
+    parent = tmp_path / "changes" / "auth" / "api-key"
+    parent.mkdir(parents=True)
+    (parent / "specs" / "01-storage").mkdir(parents=True)
+    (parent / "specs" / "02-auth").mkdir(parents=True)
+    result = run(["focus", "changes/auth/api-key"], tmp_path)
+    assert result.returncode == 0
+    assert "api-key" in result.stdout
+    # Should NOT report ambiguity
+    assert "ambiguous" not in result.stderr
+
+
 def test_focus_fuzzy_no_match(tmp_path):
     setup_flow(tmp_path)
     result = run(["focus", "PROJ-999"], tmp_path)
