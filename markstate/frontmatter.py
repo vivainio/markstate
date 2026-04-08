@@ -31,7 +31,7 @@ class Document:
         self.front_matter[key] = value
 
     def save(self) -> None:
-        self.path.write_text(_serialize(self.front_matter, self.body))
+        self.path.write_text(_serialize(self.front_matter, self.body), encoding="utf-8")
 
 
 def count_tasks(text: str) -> tuple[int, int]:
@@ -70,7 +70,7 @@ def check_task(text: str, substring: str) -> tuple[str, str] | None:
 
 
 def load(path: Path) -> Document:
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     front_matter, body = _parse(text)
     return Document(path=path, front_matter=front_matter, body=body)
 

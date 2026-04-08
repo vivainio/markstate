@@ -107,7 +107,7 @@ def _find(start: Path) -> Path | None:
 
 
 def _load(path: Path) -> FlowConfig:
-    raw = yaml.safe_load(path.read_text())
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if "redirect" in raw:
         target = (path.parent / raw["redirect"]).resolve()
         return _load(target)

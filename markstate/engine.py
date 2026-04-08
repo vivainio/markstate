@@ -191,13 +191,13 @@ def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool
         path = directory / condition.file
         if not path.exists():
             return False
-        return _tasks_all_done(*frontmatter.count_tasks(path.read_text()))
+        return _tasks_all_done(*frontmatter.count_tasks(path.read_text(encoding="utf-8")))
 
     if condition.glob is not None and condition.tasks is not None:
         paths = list(directory.glob(condition.glob))
         if not paths:
             return False
-        return all(_tasks_all_done(*frontmatter.count_tasks(p.read_text())) for p in paths)
+        return all(_tasks_all_done(*frontmatter.count_tasks(p.read_text(encoding="utf-8"))) for p in paths)
 
     return False
 
@@ -214,7 +214,7 @@ def find_entered_phase(config: FlowConfig, directory: Path) -> Phase | None:
 def next_task(config: FlowConfig, directory: Path) -> dict | None:
     """Return the first unchecked task found in any .md file under directory."""
     for path in filtered_rglob(directory, "*.md", config.exclude_dirs):
-        task = frontmatter.next_unchecked_task(path.read_text())
+        task = frontmatter.next_unchecked_task(path.read_text(encoding="utf-8"))
         if task:
             return {"file": str(path.relative_to(directory)), "task": task}
     return None
@@ -227,10 +227,10 @@ def check_task(substring: str, config: FlowConfig, directory: Path) -> dict:
     Raises TaskNotFoundError if no match.
     """
     for path in filtered_rglob(directory, "*.md", config.exclude_dirs):
-        result = frontmatter.check_task(path.read_text(), substring)
+        result = frontmatter.check_task(path.read_text(encoding="utf-8"), substring)
         if result:
             new_text, task_text = result
-            path.write_text(new_text)
+            path.write_text(new_text, encoding="utf-8")
             done, total = frontmatter.count_tasks(new_text)
             return {
                 "file": str(path.relative_to(directory)),

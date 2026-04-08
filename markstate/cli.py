@@ -78,7 +78,7 @@ def _read_focus(config: FlowConfig) -> Path | None:
         return p
     focus_file = config.root / FOCUS_FILE
     if focus_file.exists():
-        rel = focus_file.read_text().strip()
+        rel = focus_file.read_text(encoding="utf-8").strip()
         return (config.docs_root / rel).resolve()
     return None
 
@@ -234,21 +234,21 @@ def _cmd_init(args: argparse.Namespace) -> None:
             if not source.exists():
                 print(f"error: '{args.source}' not found", file=sys.stderr)
                 sys.exit(1)
-            content = source.read_text()
-        target.write_text(content)
+            content = source.read_text(encoding="utf-8")
+        target.write_text(content, encoding="utf-8")
     else:
-        target.write_text(TEMPLATE_FLOW)
+        target.write_text(TEMPLATE_FLOW, encoding="utf-8")
     print(f"created {target}")
     if args.hidden:
         gitignore = Path(".gitignore")
         entry = ".markstate/\n"
         if gitignore.exists():
-            existing = gitignore.read_text()
+            existing = gitignore.read_text(encoding="utf-8")
             if ".markstate/" not in existing:
-                gitignore.write_text(existing.rstrip("\n") + "\n" + entry)
+                gitignore.write_text(existing.rstrip("\n") + "\n" + entry, encoding="utf-8")
                 print("updated .gitignore")
         else:
-            gitignore.write_text(entry)
+            gitignore.write_text(entry, encoding="utf-8")
             print("created .gitignore")
 
 
@@ -338,7 +338,7 @@ def _write_doc(doc: ProducedDoc, target: Path, force: bool) -> None:
         print(f"error: '{target}' already exists. Use --force to overwrite.", file=sys.stderr)
         sys.exit(1)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(doc.template)
+    target.write_text(doc.template, encoding="utf-8")
     print(f"created {target.name}")
 
 
@@ -359,7 +359,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
             dest = directory / entry.file
             if not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(entry.template)
+                dest.write_text(entry.template, encoding="utf-8")
                 print(f"created {dest.relative_to(Path.cwd())}")
         elif isinstance(entry, ProducedDir):
             # Auto-create files inside existing directories matching the pattern.
@@ -375,7 +375,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                     dest = existing_dir / f.file
                     if not dest.exists():
                         dest.parent.mkdir(parents=True, exist_ok=True)
-                        dest.write_text(f.template)
+                        dest.write_text(f.template, encoding="utf-8")
                         print(f"created {dest.relative_to(Path.cwd())}")
 
 
@@ -462,7 +462,7 @@ def _cmd_focus(args: argparse.Namespace) -> None:
     if not target.is_dir():
         target = _find_focus_dir(args.directory, config.docs_root)
     rel = target.relative_to(config.docs_root)
-    (config.root / FOCUS_FILE).write_text(str(rel) + "\n")
+    (config.root / FOCUS_FILE).write_text(str(rel) + "\n", encoding="utf-8")
     print(f"focus: {rel}")
 
 
