@@ -339,7 +339,7 @@ def _write_doc(doc: ProducedDoc, target: Path, force: bool) -> None:
         sys.exit(1)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(doc.template, encoding="utf-8")
-    print(f"created {target.name}")
+    print(f"created {target}")
 
 
 def _write_dir_files(files: list[ProducedDoc], target: Path, force: bool) -> None:
