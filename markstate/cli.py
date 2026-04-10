@@ -512,10 +512,31 @@ def _cmd_status(args: argparse.Namespace) -> None:
         print(f"current phase: {phase or '(complete)'}")
         print()
 
-    for rel, entry in files.items():
-        s = entry.get("status", "")
-        task_info = f"  {entry['tasks_done']}/{entry['tasks_total']} tasks" if "tasks_total" in entry else ""
-        print(f"  {rel:30s}  {s:15s}{task_info}")
+    # Factor out the longest common directory prefix
+    rel_paths = list(files.keys())
+    if rel_paths:
+        parts_list = [Path(r).parts for r in rel_paths]
+        common_parts: list[str] = []
+        for pieces in zip(*parts_list):
+            if len(set(pieces)) == 1:
+                common_parts.append(pieces[0])
+            else:
+                break
+        # Only use common prefix if it's a directory (not the filename itself)
+        # and it actually saves something
+        common = Path(*common_parts) if common_parts else None
+        if common and all(str(r) != str(common) for r in rel_paths):
+            print(f"  {directory / common}/")
+            strip = len(common_parts)
+        else:
+            common = None
+            strip = 0
+
+        for rel, entry in files.items():
+            s = entry.get("status", "")
+            task_info = f"  {entry['tasks_done']}/{entry['tasks_total']} tasks" if "tasks_total" in entry else ""
+            short = str(Path(*Path(rel).parts[strip:])) if strip else rel
+            print(f"    {short:50s}  {s:15s}{task_info}")
 
     if config:
         print()
