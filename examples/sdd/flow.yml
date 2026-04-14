@@ -4,6 +4,7 @@
 
 phases:
   - name: drafting
+    description: Write and accept the proposal
     produces:
       - dir: changes/<change>
         files:
@@ -27,6 +28,7 @@ phases:
         status: accepted
 
   - name: speccing
+    description: Write and accept the specification
     gates:
       - file: proposal.md
         status: accepted
@@ -52,6 +54,7 @@ phases:
         status: accepted
 
   - name: implementing
+    description: Implement all tasks
     gates:
       - file: spec.md
         status: accepted
@@ -74,6 +77,7 @@ phases:
         tasks: all_done
 
   - name: done
+    description: All work complete
     gates:
       - file: tasks.md
         tasks: all_done

@@ -384,7 +384,10 @@ def _report_transition(
 ) -> None:
     if phase_after == phase_before:
         return
-    print(f"→ entering phase: {phase_after.name if phase_after else '(complete)'}")
+    if phase_after and phase_after.description:
+        print(f"→ entering phase: {phase_after.name} — {phase_after.description}")
+    else:
+        print(f"→ entering phase: {phase_after.name if phase_after else '(complete)'}")
     if phase_after and phase_after.advance_when:
         print("  advance when:")
         for cond in phase_after.advance_when:
@@ -509,7 +512,11 @@ def _cmd_status(args: argparse.Namespace) -> None:
         except ValueError:
             display_dir = directory
         print(f"directory: {display_dir}")
-        print(f"current phase: {phase or '(complete)'}")
+        phase_obj = config.phase(phase) if phase else None
+        if phase_obj and phase_obj.description:
+            print(f"current phase: {phase} — {phase_obj.description}")
+        else:
+            print(f"current phase: {phase or '(complete)'}")
         print()
 
     # Factor out the longest common directory prefix

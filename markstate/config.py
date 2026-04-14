@@ -52,6 +52,7 @@ class ProducedDir:
 @dataclass
 class Phase:
     name: str
+    description: str | None = None
     produces: list[ProducedDoc | ProducedDir] = field(default_factory=list)
     gates: list[Condition] = field(default_factory=list)
     advance_when: list[Condition] = field(default_factory=list)
@@ -146,6 +147,7 @@ def _parse_phase(raw: dict) -> Phase:
             produces.append(_parse_produced_dir(p))
     return Phase(
         name=raw["name"],
+        description=raw.get("description"),
         produces=produces,
         gates=[_parse_condition(c) for c in raw.get("gates", [])],
         advance_when=[_parse_condition(c) for c in raw.get("advance_when", [])],
