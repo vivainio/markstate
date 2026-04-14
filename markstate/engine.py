@@ -16,7 +16,7 @@ class TaskNotFoundError(Exception):
 
 def current_phase(config: FlowConfig, directory: Path) -> Phase | None:
     """Return the first phase whose gates all pass but advance_when conditions don't all pass."""
-    for phase in config.phases:
+    for phase in config.phases_for(directory):
         if not _all_pass(phase.gates, config, directory):
             continue
         if not _all_pass(phase.advance_when, config, directory):
@@ -157,7 +157,7 @@ def status(config: FlowConfig, directory: Path) -> dict[str, object]:
                     and _all_pass(p.advance_when, config, directory)
                 ),
             }
-            for p in config.phases
+            for p in config.phases_for(directory)
         ],
     }
 
@@ -205,7 +205,7 @@ def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool
 def find_entered_phase(config: FlowConfig, directory: Path) -> Phase | None:
     """Return the last phase whose entry gates are satisfied (may already be complete)."""
     entered = None
-    for phase in config.phases:
+    for phase in config.phases_for(directory):
         if _all_pass(phase.gates, config, directory):
             entered = phase
     return entered

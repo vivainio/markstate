@@ -70,6 +70,53 @@ def test_current_phase_none_when_complete(tmp_path):
     assert engine.current_phase(cfg, tmp_path) is None
 
 
+# --- current_phase with scope ---
+
+
+def test_current_phase_scope_filters_phases(tmp_path):
+    """A directory under plans/ should only see phases scoped to plans/ (and unscoped)."""
+    cfg = make_config(tmp_path, [
+        Phase("drafting", scope="changes/",
+              advance_when=[Condition(file="proposal.md", status="accepted")]),
+        Phase("planning", scope="plans/",
+              advance_when=[Condition(file="plan.md", status="accepted")]),
+        Phase("done"),
+    ])
+    plans_dir = tmp_path / "plans" / "migrate-db"
+    plans_dir.mkdir(parents=True)
+    # plans/migrate-db should be in "planning" phase, not "drafting"
+    assert engine.current_phase(cfg, plans_dir).name == "planning"
+
+
+def test_current_phase_scope_changes_path(tmp_path):
+    """A directory under changes/ should only see changes-scoped phases."""
+    cfg = make_config(tmp_path, [
+        Phase("drafting", scope="changes/",
+              advance_when=[Condition(file="proposal.md", status="accepted")]),
+        Phase("planning", scope="plans/",
+              advance_when=[Condition(file="plan.md", status="accepted")]),
+        Phase("done"),
+    ])
+    changes_dir = tmp_path / "changes" / "auth" / "add-oauth"
+    changes_dir.mkdir(parents=True)
+    assert engine.current_phase(cfg, changes_dir).name == "drafting"
+
+
+def test_status_only_shows_scoped_phases(tmp_path):
+    cfg = make_config(tmp_path, [
+        Phase("drafting", scope="changes/",
+              advance_when=[Condition(file="proposal.md", status="accepted")]),
+        Phase("planning", scope="plans/",
+              advance_when=[Condition(file="plan.md", status="accepted")]),
+        Phase("done"),
+    ])
+    plans_dir = tmp_path / "plans" / "migrate-db"
+    plans_dir.mkdir(parents=True)
+    s = engine.status(cfg, plans_dir)
+    phase_names = [p["name"] for p in s["phases"]]
+    assert phase_names == ["planning", "done"]
+
+
 # --- check_gate ---
 
 

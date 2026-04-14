@@ -13,6 +13,7 @@ Ready-made flows and agent skills are in [`examples/`](examples/) and [`skills/`
 | [`examples/sdd/`](examples/sdd/) | Spec-driven development: proposal → spec → tasks → done |
 | [`examples/openspec/`](examples/openspec/) | [OpenSpec](https://github.com/Fission-AI/OpenSpec)-style: proposal + design agreed upfront, then tasks |
 | [`examples/shared-flow/`](examples/shared-flow/) | Multi-repo setup: canonical `flow.yml` in a docs repo, redirect stub in source repos |
+| [`examples/scoped-tracks/`](examples/scoped-tracks/) | Two tracks in one flow: full spec-driven `changes/` and lightweight `plans/` |
 
 Each example includes a `flow.yml` to place at the root of your change collection (e.g. `specs/flow.yml`) and a matching skill in `skills/` to guide an AI agent through the workflow.
 
@@ -242,6 +243,7 @@ docs_root: ../my-docs-repo
 | Field | Description |
 |---|---|
 | `name` | Phase name |
+| `scope` | Path prefix filter — phase only applies to directories under this path (optional) |
 | `produces` | Documents this phase produces (files or directory templates) |
 | `gates` | Conditions that must pass to enter this phase |
 | `advance_when` | Conditions that must pass to leave this phase |
@@ -298,6 +300,35 @@ produces:
 | `name` | Transition name (used with `markstate do`) |
 | `from` | Required current status |
 | `to` | New status after applying the transition |
+
+## Scoped phases
+
+When a single project has different kinds of work that follow different workflows, use `scope` to restrict phases to specific directory prefixes. Each directory only sees phases whose scope matches its path (plus any unscoped phases).
+
+```yaml
+phases:
+  - name: drafting
+    scope: changes/
+    # ...
+  - name: speccing
+    scope: changes/
+    # ...
+  - name: implementing
+    scope: changes/
+    # ...
+  - name: changes-done
+    scope: changes/
+
+  - name: planning
+    scope: plans/
+    # ...
+  - name: plans-done
+    scope: plans/
+```
+
+A directory under `changes/auth/add-oauth/` sees: drafting → speccing → implementing → changes-done. A directory under `plans/infra/migrate-db/` sees: planning → plans-done. Phases without a scope apply to all directories.
+
+See [`examples/scoped-tracks/`](examples/scoped-tracks/) for a complete example.
 
 ## Sharing a flow across multiple repos
 

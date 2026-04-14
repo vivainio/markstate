@@ -1,0 +1,107 @@
+# Two-track workflow: full spec-driven changes and lightweight plans.
+#
+# Directory layout:
+#   changes/
+#     auth/
+#       add-oauth/
+#         proposal.md
+#         spec.md
+#         tasks.md
+#   plans/
+#     infra/
+#       migrate-db/
+#         plan.md
+
+phases:
+  # --- changes track: drafting → speccing → implementing → done ---
+
+  - name: drafting
+    scope: changes/
+    produces:
+      - dir: changes/<area>/<change>
+        files:
+          - file: proposal.md
+            template: |
+              ---
+              status: draft
+              ---
+
+              # Proposal
+
+              ## Problem
+
+              ## Solution
+    advance_when:
+      - file: proposal.md
+        status: accepted
+
+  - name: speccing
+    scope: changes/
+    gates:
+      - file: proposal.md
+        status: accepted
+    produces:
+      - file: spec.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Specification
+        auto: true
+    advance_when:
+      - file: spec.md
+        status: accepted
+
+  - name: implementing
+    scope: changes/
+    gates:
+      - file: spec.md
+        status: accepted
+    produces:
+      - file: tasks.md
+        template: |
+          # Tasks
+          - [ ]
+        auto: true
+    advance_when:
+      - file: tasks.md
+        tasks: all_done
+
+  - name: changes-done
+    scope: changes/
+    gates:
+      - file: tasks.md
+        tasks: all_done
+
+  # --- plans track: planning → done ---
+
+  - name: planning
+    scope: plans/
+    produces:
+      - dir: plans/<area>/<plan>
+        files:
+          - file: plan.md
+            template: |
+              ---
+              status: draft
+              ---
+
+              # Plan
+    advance_when:
+      - file: plan.md
+        status: accepted
+
+  - name: plans-done
+    scope: plans/
+    gates:
+      - file: plan.md
+        status: accepted
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+  - name: reopen
+    from: accepted
+    to: draft

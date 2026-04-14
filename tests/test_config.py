@@ -171,6 +171,77 @@ transitions: []
     assert "status: draft" in doc.template
 
 
+def test_parse_scope(tmp_path):
+    write_flow(tmp_path, """
+phases:
+  - name: drafting
+    scope: changes/
+    advance_when:
+      - file: proposal.md
+        status: accepted
+  - name: planning
+    scope: plans/
+    advance_when:
+      - file: plan.md
+        status: accepted
+  - name: done
+transitions: []
+""")
+    cfg = find_and_load(tmp_path)
+    assert cfg.phases[0].scope == "changes/"
+    assert cfg.phases[1].scope == "plans/"
+    assert cfg.phases[2].scope is None
+
+
+def test_phases_for_filters_by_scope(tmp_path):
+    write_flow(tmp_path, """
+phases:
+  - name: drafting
+    scope: changes/
+  - name: planning
+    scope: plans/
+  - name: done
+transitions: []
+""")
+    cfg = find_and_load(tmp_path)
+
+    changes_dir = tmp_path / "changes" / "auth" / "add-oauth"
+    changes_dir.mkdir(parents=True)
+    phases = cfg.phases_for(changes_dir)
+    assert [p.name for p in phases] == ["drafting", "done"]
+
+    plans_dir = tmp_path / "plans" / "migrate-db"
+    plans_dir.mkdir(parents=True)
+    phases = cfg.phases_for(plans_dir)
+    assert [p.name for p in phases] == ["planning", "done"]
+
+
+def test_phases_for_no_scope_matches_all(tmp_path):
+    write_flow(tmp_path, """
+phases:
+  - name: drafting
+  - name: done
+transitions: []
+""")
+    cfg = find_and_load(tmp_path)
+    subdir = tmp_path / "anything"
+    subdir.mkdir()
+    assert [p.name for p in cfg.phases_for(subdir)] == ["drafting", "done"]
+
+
+def test_phases_for_outside_docs_root(tmp_path):
+    write_flow(tmp_path, """
+phases:
+  - name: drafting
+    scope: changes/
+  - name: done
+transitions: []
+""")
+    cfg = find_and_load(tmp_path)
+    # Outside docs_root → all phases returned (no filtering)
+    assert [p.name for p in cfg.phases_for(tmp_path.parent)] == ["drafting", "done"]
+
+
 def test_parse_produced_dir(tmp_path):
     write_flow(tmp_path, """
 phases:

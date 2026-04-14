@@ -174,3 +174,92 @@ def test_openspec_missing_delta_spec_blocks_advance(tmp_path):
     assert result.returncode == 0
     assert "speccing" in result.stdout
     assert "implementing" not in result.stdout.split("current phase:")[0]
+
+
+# ---------------------------------------------------------------------------
+# scoped-tracks example
+# ---------------------------------------------------------------------------
+
+
+def test_scoped_tracks_changes_workflow(tmp_path):
+    """Changes track follows the full drafting → speccing → implementing → done flow."""
+    shutil.copy(EXAMPLES_DIR / "scoped-tracks" / "flow.yml", tmp_path / "flow.yml")
+
+    result = run(["new", "changes/auth/add-oauth"], tmp_path)
+    assert result.returncode == 0
+    change = tmp_path / "changes" / "auth" / "add-oauth"
+    assert (change / "proposal.md").exists()
+
+    # --- drafting ---
+    result = run(["status"], change)
+    assert "drafting" in result.stdout
+    # plans-only phases should not appear
+    assert "planning" not in result.stdout
+
+    result = run(["do", "accept", "proposal.md"], change)
+    assert result.returncode == 0
+    assert (change / "spec.md").exists()
+
+    # --- speccing ---
+    result = run(["status"], change)
+    assert "speccing" in result.stdout
+
+    result = run(["do", "accept", "spec.md"], change)
+    assert result.returncode == 0
+    assert (change / "tasks.md").exists()
+
+    # --- implementing ---
+    result = run(["status"], change)
+    assert "implementing" in result.stdout
+
+    (change / "tasks.md").write_text("- [ ] Do it\n")
+    run(["check", "Do it"], change)
+
+    # --- done ---
+    result = run(["status"], change)
+    assert "changes-done" in result.stdout
+
+
+def test_scoped_tracks_plans_workflow(tmp_path):
+    """Plans track follows the shorter planning → done flow."""
+    shutil.copy(EXAMPLES_DIR / "scoped-tracks" / "flow.yml", tmp_path / "flow.yml")
+
+    result = run(["new", "plans/infra/migrate-db"], tmp_path)
+    assert result.returncode == 0
+    plan = tmp_path / "plans" / "infra" / "migrate-db"
+    assert (plan / "plan.md").exists()
+
+    # --- planning ---
+    result = run(["status"], plan)
+    assert "planning" in result.stdout
+    # changes-only phases should not appear
+    assert "drafting" not in result.stdout
+    assert "speccing" not in result.stdout
+    assert "implementing" not in result.stdout
+
+    result = run(["do", "accept", "plan.md"], plan)
+    assert result.returncode == 0
+
+    # --- done ---
+    result = run(["status"], plan)
+    assert "plans-done" in result.stdout
+
+
+def test_scoped_tracks_independent(tmp_path):
+    """Changes and plans don't interfere with each other."""
+    shutil.copy(EXAMPLES_DIR / "scoped-tracks" / "flow.yml", tmp_path / "flow.yml")
+
+    run(["new", "changes/auth/add-oauth"], tmp_path)
+    run(["new", "plans/infra/migrate-db"], tmp_path)
+
+    change = tmp_path / "changes" / "auth" / "add-oauth"
+    plan = tmp_path / "plans" / "infra" / "migrate-db"
+
+    # accepting the plan doesn't affect the change
+    run(["do", "accept", "plan.md"], plan)
+    result = run(["status"], change)
+    assert "drafting" in result.stdout
+
+    # change is still in drafting while plan is done
+    result = run(["status"], plan)
+    assert "plans-done" in result.stdout

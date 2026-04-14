@@ -53,6 +53,7 @@ class ProducedDir:
 class Phase:
     name: str
     description: str | None = None
+    scope: str | None = None
     produces: list[ProducedDoc | ProducedDir] = field(default_factory=list)
     gates: list[Condition] = field(default_factory=list)
     advance_when: list[Condition] = field(default_factory=list)
@@ -88,6 +89,28 @@ class FlowConfig:
 
     def transition_names(self) -> list[str]:
         return [t.name for t in self.transitions]
+
+    def phases_for(self, directory: Path) -> list[Phase]:
+        """Return phases whose scope matches directory (relative to docs_root).
+
+        A phase with no scope applies to all directories.
+        A phase with scope "changes/" applies to directories whose relative
+        path starts with "changes/" (prefix match on path components).
+        """
+        try:
+            rel = directory.relative_to(self.docs_root)
+        except ValueError:
+            return self.phases
+        rel_parts = rel.parts
+        result = []
+        for p in self.phases:
+            if p.scope is None:
+                result.append(p)
+                continue
+            scope_parts = Path(p.scope).parts
+            if rel_parts[: len(scope_parts)] == scope_parts:
+                result.append(p)
+        return result
 
 
 def find_and_load(start: Path | None = None) -> FlowConfig:
@@ -148,6 +171,7 @@ def _parse_phase(raw: dict) -> Phase:
     return Phase(
         name=raw["name"],
         description=raw.get("description"),
+        scope=raw.get("scope"),
         produces=produces,
         gates=[_parse_condition(c) for c in raw.get("gates", [])],
         advance_when=[_parse_condition(c) for c in raw.get("advance_when", [])],
