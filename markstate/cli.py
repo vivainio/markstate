@@ -532,14 +532,23 @@ def _cmd_status(args: argparse.Namespace) -> None:
             common = None
             strip = 0
 
+        short_names = {
+            rel: str(Path(*Path(rel).parts[strip:])) if strip else rel
+            for rel in files
+        }
+        name_width = max(len(s) for s in short_names.values())
+        status_width = max(
+            (len(str(e.get("status", ""))) for e in files.values()), default=0
+        )
         for rel, entry in files.items():
             s = entry.get("status", "")
             task_info = f"  {entry['tasks_done']}/{entry['tasks_total']} tasks" if "tasks_total" in entry else ""
-            short = str(Path(*Path(rel).parts[strip:])) if strip else rel
-            print(f"    {short:50s}  {s:15s}{task_info}")
+            short = short_names[rel]
+            print(f"    {short:{name_width}s}  {s:>{status_width}s}{task_info}")
 
     if config:
         print()
+        phase_width = max(len(p["name"]) for p in result["phases"])
         for p in result["phases"]:
             if p["complete"]:
                 state = "complete"
@@ -547,7 +556,7 @@ def _cmd_status(args: argparse.Namespace) -> None:
                 state = "in progress"
             else:
                 state = "pending"
-            print(f"  {p['name']:20s}  {state}")
+            print(f"  {p['name']:{phase_width}s}  {state}")
 
 
 def _cmd_check_gate(args: argparse.Namespace) -> None:
@@ -568,8 +577,10 @@ def _cmd_check_gate(args: argparse.Namespace) -> None:
 
 def _cmd_transitions(args: argparse.Namespace) -> None:
     config = _load_config()
+    name_width = max(len(t.name) for t in config.transitions)
+    from_width = max(len(t.from_state) for t in config.transitions)
     for t in config.transitions:
-        print(f"  {t.name:20s}  {t.from_state} → {t.to_state}")
+        print(f"  {t.name:{name_width}s}  {t.from_state:{from_width}s} → {t.to_state}")
 
 
 def _cmd_next(args: argparse.Namespace) -> None:
@@ -582,15 +593,16 @@ def _cmd_next(args: argparse.Namespace) -> None:
             print("nothing to do")
             return
         transition_map = {t.name: t.to_state for t in config.transitions}
+        file_width = max(len(item["file"]) for item in results)
         for item in results:
             if item["missing"]:
                 hint = item.get("hint", f"markstate new {item['file']}")
-                print(f"  {item['file']:30s}  (not created)    → {hint}")
+                print(f"  {item['file']:{file_width}s}  (not created)  → {hint}")
             else:
                 transitions = ", ".join(
                     f"{t} (→ {transition_map[t]})" for t in item["transitions"]
                 )
-                print(f"  {item['file']:30s}  {item['status']:15s}  → {transitions}")
+                print(f"  {item['file']:{file_width}s}  {item['status']:15s}  → {transitions}")
 
 
 def _cmd_next_task(args: argparse.Namespace) -> None:
@@ -679,6 +691,24 @@ def _cmd_query(args: argparse.Namespace) -> None:
         rel = str(path.relative_to(root))
         fm_parts = "  ".join(f"{k}={v}" for k, v in doc.front_matter.items())
         print(f"  {rel:40s}  {fm_parts}")
+
+
+def _cmd_install_skills(args: argparse.Namespace) -> None:
+    from importlib.resources import files as pkg_files
+
+    target_root = Path.home() / ".claude" / "skills"
+    source_root = pkg_files("markstate").joinpath("skills")
+    for skill_dir in source_root.iterdir():
+        if not skill_dir.is_dir():
+            continue
+        dest = target_root / skill_dir.name
+        dest.mkdir(parents=True, exist_ok=True)
+        for item in skill_dir.iterdir():
+            if item.is_file():
+                (dest / item.name).write_text(
+                    item.read_text(encoding="utf-8"), encoding="utf-8"
+                )
+                print(f"installed {dest / item.name}")
 
 
 def _cmd_check(args: argparse.Namespace) -> None:
@@ -795,6 +825,9 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("directory", nargs="?", default=None)
     _add_set_arg(p)
 
+    # install-skills
+    sub.add_parser("install-skills", help="Install markstate Claude skill to ~/.claude/skills/.")
+
     # query
     p = sub.add_parser(
         "query",
@@ -842,5 +875,6 @@ def main() -> None:
         "next-task": _cmd_next_task,
         "check": _cmd_check,
         "query": _cmd_query,
+        "install-skills": _cmd_install_skills,
     }
     dispatch[args.command](args)

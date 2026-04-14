@@ -13,6 +13,9 @@ markstate = "markstate.cli:main"
 [tool.setuptools.packages.find]
 include = ["markstate*"]
 
+[tool.setuptools.package-data]
+markstate = ["skills/**/*"]
+
 [tool.uv]
 package = true
 
