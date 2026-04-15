@@ -52,6 +52,12 @@ def apply_fields(doc: frontmatter.Document, fields: dict[str, str]) -> None:
             doc.set(key, resolved)
 
 
+def unset_keys(doc: frontmatter.Document, keys: list[str] | tuple[str, ...]) -> None:
+    """Remove the listed keys from doc's frontmatter. Missing keys are silent no-ops."""
+    for key in keys:
+        doc.unset(key)
+
+
 def current_phase(config: FlowConfig, directory: Path) -> Phase | None:
     """Return the first phase whose gates all pass but advance_when conditions don't all pass."""
     for phase in config.phases_for(directory):
@@ -85,6 +91,7 @@ def do_transition(transition_name: str, target: Path, config: FlowConfig) -> tup
         )
 
     doc.set(config.status_field, t.to_state)
+    unset_keys(doc, t.unset_fields)
     apply_fields(doc, t.set_fields)
     doc.save()
     return current, t.to_state

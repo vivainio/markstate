@@ -325,6 +325,74 @@ def test_new_applies_produces_set_fields(tmp_path):
     assert "first-touched-at:" in text
 
 
+UNSET_FLOW = """\
+phases:
+  - name: drafting
+    produces:
+      - file: spec.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Spec
+    advance_when:
+      - file: spec.md
+        status: accepted
+
+  - name: done
+    gates:
+      - file: spec.md
+        status: accepted
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+  - name: block
+    from: draft
+    to: blocked
+    set:
+      blocked-at: now
+  - name: unblock
+    from: blocked
+    to: draft
+    set:
+      unblocked-at: now
+    unset:
+      - blocked-at
+      - blocked-reason
+"""
+
+
+def test_do_unblock_clears_blocked_fields(tmp_path):
+    setup_flow(tmp_path, UNSET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    # block with a CLI-supplied reason
+    assert run(
+        ["do", "block", "spec.md", "--set", "blocked-reason=waiting"], tmp_path
+    ).returncode == 0
+    text = (tmp_path / "spec.md").read_text()
+    assert "blocked-at:" in text
+    assert "blocked-reason: waiting" in text
+
+    assert run(["do", "unblock", "spec.md"], tmp_path).returncode == 0
+    text = (tmp_path / "spec.md").read_text()
+    import re as _re
+    assert _re.search(r"^blocked-at:", text, _re.MULTILINE) is None
+    assert _re.search(r"^blocked-reason:", text, _re.MULTILINE) is None
+    assert _re.search(r"^unblocked-at:", text, _re.MULTILINE) is not None
+
+
+def test_cli_unset_flag_removes_field(tmp_path):
+    setup_flow(tmp_path, UNSET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    assert run(["set", "draft", "spec.md", "--set", "note=temp"], tmp_path).returncode == 0
+    assert "note: temp" in (tmp_path / "spec.md").read_text()
+    assert run(["set", "draft", "spec.md", "--unset", "note"], tmp_path).returncode == 0
+    assert "note:" not in (tmp_path / "spec.md").read_text()
+
+
 def test_do_applies_transition_set_and_once_is_stable(tmp_path):
     import re as _re
 

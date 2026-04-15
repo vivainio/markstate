@@ -106,15 +106,18 @@ spec.md: draft → approved
 
 When a transition causes a phase change, the new phase and its completion conditions are printed. Files marked `auto: true` in the new phase's `produces` are created automatically.
 
-### `--set key=value`
+### `--set key=value` and `--unset key`
 
-`new`, `set`, `do`, and `check` all accept one or more `--set key=value` flags to write additional frontmatter fields alongside the main operation:
+`new`, `set`, `do`, and `check` all accept one or more `--set key=value` flags to write additional frontmatter fields alongside the main operation, and `--unset key` flags to remove fields:
 
 ```
 markstate do accept proposal.md --set reviewer=me --set reviewed_at=now
 markstate set approved spec.md --set approved_by=me
 markstate new proposal.md --set author=me --set created_at=now
+markstate do unblock spec.md --unset blocked-reason
 ```
+
+`--unset KEY` pops the field if present and is a silent no-op otherwise.
 
 Magic values are expanded automatically:
 
@@ -126,9 +129,9 @@ Magic values are expanded automatically:
 
 Prefix a key with `once-` to write only when the target field is currently absent. The prefix is stripped from the written key, so `--set once-first-accepted-at=now` writes `first-accepted-at` on the first application and is a no-op afterwards.
 
-### Flow-level annotations: `set:` in `flow.yml`
+### Flow-level annotations: `set:` and `unset:` in `flow.yml`
 
-Transitions and produced documents can declare a `set:` block whose key/value pairs are written whenever the transition fires or the document is materialized. Values use the same magic vocabulary as `--set` (`me`, `now`, `today`) and the same `once-` prefix:
+Transitions and produced documents can declare a `set:` block whose key/value pairs are written whenever the transition fires or the document is materialized. Values use the same magic vocabulary as `--set` (`me`, `now`, `today`) and the same `once-` prefix. They can also declare an `unset:` list of field names to remove — useful for transient fields like `blocked-at` that should not outlive their status:
 
 ```yaml
 phases:
@@ -156,9 +159,48 @@ transitions:
     to: draft
     set:
       reopened-at: now
+  - name: block
+    from: draft
+    to: blocked
+    set:
+      blocked-at: now
+  - name: unblock
+    from: blocked
+    to: draft
+    set:
+      unblocked-at: now
+    unset:
+      - blocked-at
+      - blocked-reason
 ```
 
-A transition's `set:` fields are applied together with the status change. Plain keys overwrite on every application; `once-` keys set the unprefixed name only if it is currently absent. CLI `--set key=value` still takes precedence over flow-level `set:` for the same key.
+A transition's edits are applied together with the status change, in order: `unset:` first, then `set:`. If the same key appears in both, `set:` wins. CLI `--set`/`--unset` are applied after the flow-level edits (same unset-then-set order), so the user's explicit intent always takes precedence.
+
+**Tip:** if you repeat the same `set:` / `unset:` blocks across many entries, YAML anchors keep the flow file terse. Define them once under a scratch top-level key like `_anchors:` (markstate ignores unknown top-level keys) and reference them with `*name`:
+
+```yaml
+_anchors:
+  creation: &creation
+    once-created-at: now
+    once-created-by: me
+  acceptance: &acceptance
+    accepted-at: now
+    accepted-by: me
+    once-first-accepted-at: now
+
+phases:
+  - name: drafting
+    produces:
+      - file: proposal.md
+        template: "..."
+        set: *creation
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+    set: *acceptance
+```
 
 ### `status`
 

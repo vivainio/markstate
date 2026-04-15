@@ -263,6 +263,41 @@ transitions:
     }
 
 
+def test_parse_transition_unset_fields(tmp_path):
+    write_flow(tmp_path, """
+phases: []
+transitions:
+  - name: unblock
+    from: blocked
+    to: draft
+    set:
+      unblocked-at: now
+    unset:
+      - blocked-at
+      - blocked-reason
+""")
+    cfg = find_and_load(tmp_path)
+    t = cfg.transition("unblock")
+    assert t.set_fields == {"unblocked-at": "now"}
+    assert t.unset_fields == ["blocked-at", "blocked-reason"]
+
+
+def test_parse_produced_doc_unset_fields(tmp_path):
+    write_flow(tmp_path, """
+phases:
+  - name: drafting
+    produces:
+      - file: proposal.md
+        template: "---\\nstatus: draft\\nstale: yes\\n---\\n"
+        unset:
+          - stale
+transitions: []
+""")
+    cfg = find_and_load(tmp_path)
+    entry = cfg.phases[0].produces[0]
+    assert entry.unset_fields == ["stale"]
+
+
 def test_parse_produced_doc_set_fields(tmp_path):
     write_flow(tmp_path, """
 phases:

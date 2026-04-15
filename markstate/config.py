@@ -22,6 +22,7 @@ class Transition:
     from_state: str
     to_state: str
     set_fields: dict[str, str] = field(default_factory=dict)
+    unset_fields: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -39,6 +40,7 @@ class ProducedDoc:
     template: str | None = None
     auto: bool = False
     set_fields: dict[str, str] = field(default_factory=dict)
+    unset_fields: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -188,6 +190,7 @@ def _parse_produced_doc(raw: str | dict) -> ProducedDoc:
         template=raw.get("template"),
         auto=raw.get("auto", False),
         set_fields=dict(raw.get("set") or {}),
+        unset_fields=list(raw.get("unset") or []),
     )
 
 
@@ -204,6 +207,7 @@ def _parse_transition(raw: dict) -> Transition:
         from_state=raw["from"],
         to_state=raw["to"],
         set_fields=dict(raw.get("set") or {}),
+        unset_fields=list(raw.get("unset") or []),
     )
 
 

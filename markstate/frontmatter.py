@@ -30,6 +30,9 @@ class Document:
     def set(self, key: str, value: object) -> None:
         self.front_matter[key] = value
 
+    def unset(self, key: str) -> None:
+        self.front_matter.pop(key, None)
+
     def save(self) -> None:
         self.path.write_text(_serialize(self.front_matter, self.body), encoding="utf-8")
 

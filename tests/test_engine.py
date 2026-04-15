@@ -434,6 +434,77 @@ def test_do_transition_applies_set_fields(tmp_path):
     assert doc.get("reviewer") == "alice"
 
 
+def test_do_transition_unset_clears_fields(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[
+            Transition("block", "draft", "blocked", set_fields={"blocked-at": "now"}),
+            Transition(
+                "unblock",
+                "blocked",
+                "draft",
+                set_fields={"unblocked-at": "now"},
+                unset_fields=["blocked-at", "blocked-reason"],
+            ),
+        ],
+    )
+    spec = tmp_path / "spec.md"
+    write_md(spec, status="draft")
+    engine.do_transition("block", spec, cfg)
+    # Simulate a manually-set reason so unset has something to remove
+    d = engine.frontmatter.load(spec)
+    d.set("blocked-reason", "waiting on infra")
+    d.save()
+    assert engine.frontmatter.load(spec).get("blocked-at") is not None
+
+    engine.do_transition("unblock", spec, cfg)
+    after = engine.frontmatter.load(spec)
+    assert after.get("status") == "draft"
+    assert after.get("blocked-at") is None
+    assert after.get("blocked-reason") is None
+    assert after.get("unblocked-at") is not None
+
+
+def test_do_transition_unset_missing_key_is_silent(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[
+            Transition("accept", "draft", "accepted", unset_fields=["never-existed"]),
+        ],
+    )
+    spec = tmp_path / "spec.md"
+    write_md(spec, status="draft")
+    # Must not raise
+    engine.do_transition("accept", spec, cfg)
+    assert engine.frontmatter.load(spec).get("status") == "accepted"
+
+
+def test_do_transition_set_wins_over_unset_on_same_key(tmp_path):
+    """If a key appears in both unset and set, set wins (unset runs first)."""
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[
+            Transition(
+                "refresh",
+                "draft",
+                "draft",
+                set_fields={"touched": "today"},
+                unset_fields=["touched"],
+            ),
+        ],
+    )
+    spec = tmp_path / "spec.md"
+    write_md(spec, status="draft")
+    d = engine.frontmatter.load(spec)
+    d.set("touched", "stale")
+    d.save()
+    engine.do_transition("refresh", spec, cfg)
+    assert engine.frontmatter.load(spec).get("touched") is not None
+
+
 def test_do_transition_once_field_preserved_on_reapply(tmp_path):
     cfg = make_config(
         tmp_path,

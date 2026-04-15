@@ -37,13 +37,22 @@ def _add_set_arg(p: argparse.ArgumentParser) -> None:
         "--set", metavar="KEY=VALUE", action="append", default=[],
         help="Set extra frontmatter fields ('me' = git user, 'now' = UTC timestamp, 'today' = UTC date). Prefix key with 'once-' to write only when absent.",
     )
+    p.add_argument(
+        "--unset", metavar="KEY", action="append", default=[],
+        help="Remove a frontmatter field (repeatable). No-op if the field is absent.",
+    )
 
 
-def _apply_extra_fields(path: Path, fields: dict[str, str]) -> None:
-    if not fields:
+def _apply_frontmatter_edits(
+    path: Path,
+    set_fields: dict[str, str],
+    unset_fields: list[str] | tuple[str, ...] = (),
+) -> None:
+    if not set_fields and not unset_fields:
         return
     doc = frontmatter.load(path)
-    engine.apply_fields(doc, fields)
+    engine.unset_keys(doc, unset_fields)
+    engine.apply_fields(doc, set_fields)
     doc.save()
 
 
@@ -240,6 +249,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
     config = _load_config()
     cwd = Path.cwd()
     extra = _parse_set_args(args.set)
+    extra_unset = list(args.unset)
 
     # Resolve the target path relative to docs_root.
     # If inside a dir template (cd'd into a change dir), a bare filename
@@ -258,7 +268,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
             sys.exit(1)
         target = cwd / args.file
         _write_doc(produced, target, args.force)
-        _apply_extra_fields(target, extra)
+        _apply_frontmatter_edits(target, extra, extra_unset)
         return
 
     # Build candidate base directories to try, in priority order.
@@ -291,12 +301,12 @@ def _cmd_new(args: argparse.Namespace) -> None:
             for entry in phase.produces:
                 if isinstance(entry, ProducedDoc) and entry.file == args.file:
                     _write_doc(entry, resolved, args.force)
-                    _apply_extra_fields(resolved, extra)
+                    _apply_frontmatter_edits(resolved, extra, extra_unset)
                     return
                 if isinstance(entry, ProducedDir) and rel.match(entry.glob_pattern):
                     _write_dir_files(entry.files, resolved, args.force)
                     for f in entry.files:
-                        _apply_extra_fields(resolved / f.file, extra)
+                        _apply_frontmatter_edits(resolved / f.file, extra, extra_unset)
                     return
     # Collect all producible patterns for the hint
     hints = []
@@ -323,7 +333,7 @@ def _write_doc(doc: ProducedDoc, target: Path, force: bool) -> None:
         sys.exit(1)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(doc.template, encoding="utf-8")
-    _apply_extra_fields(target, doc.set_fields)
+    _apply_frontmatter_edits(target, doc.set_fields, doc.unset_fields)
     print(f"created {target}")
 
 
@@ -345,7 +355,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
             if not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(entry.template, encoding="utf-8")
-                _apply_extra_fields(dest, entry.set_fields)
+                _apply_frontmatter_edits(dest, entry.set_fields, entry.unset_fields)
                 print(f"created {dest.relative_to(Path.cwd())}")
         elif isinstance(entry, ProducedDir):
             # Auto-create files inside existing directories matching the pattern.
@@ -362,7 +372,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                     if not dest.exists():
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_text(f.template, encoding="utf-8")
-                        _apply_extra_fields(dest, f.set_fields)
+                        _apply_frontmatter_edits(dest, f.set_fields, f.unset_fields)
                         print(f"created {dest.relative_to(Path.cwd())}")
 
 
@@ -399,8 +409,8 @@ def _cmd_set(args: argparse.Namespace) -> None:
         doc = frontmatter.load(target)
         old = str(doc.get(status_field) or "")
         doc.set(status_field, args.status)
-        for key, value in extra.items():
-            doc.set(key, value)
+        engine.unset_keys(doc, args.unset)
+        engine.apply_fields(doc, extra)
         doc.save()
         print(f"{t}: {old or '(none)'} → {args.status}")
 
@@ -422,7 +432,7 @@ def _cmd_do(args: argparse.Namespace) -> None:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    _apply_extra_fields(target, _parse_set_args(args.set))
+    _apply_frontmatter_edits(target, _parse_set_args(args.set), list(args.unset))
 
     phase_after = engine.current_phase(config, phase_dir)
     _report_transition(phase_before, phase_after, config, phase_dir)
@@ -717,7 +727,7 @@ def _cmd_check(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     print(f"  {result['file']}  [x] {result['task']}  ({result['done']}/{result['total']})")
-    _apply_extra_fields(directory / result["file"], _parse_set_args(args.set))
+    _apply_frontmatter_edits(directory / result["file"], _parse_set_args(args.set), list(args.unset))
 
     phase_after = engine.current_phase(config, directory)
     _report_transition(phase_before, phase_after, config, directory)
