@@ -393,6 +393,54 @@ def test_cli_unset_flag_removes_field(tmp_path):
     assert "note:" not in (tmp_path / "spec.md").read_text()
 
 
+def test_query_relative_dates(tmp_path):
+    """Right-hand side of query predicates expands Nd/Nw/Nm/Ny relative dates."""
+    from datetime import datetime, timedelta, timezone
+
+    setup_flow(tmp_path)
+    now = datetime.now(timezone.utc)
+    far_past = (now - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    recent = (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    (tmp_path / "old.md").write_text(f"---\nstatus: done\nclosed-at: '{far_past}'\n---\n# Old\n")
+    (tmp_path / "new.md").write_text(f"---\nstatus: done\nclosed-at: '{recent}'\n---\n# New\n")
+
+    # "30d" expands to 30 days ago; only the far-past doc is older than that
+    result = run(["query", "status=done", "closed-at<30d"], tmp_path)
+    assert result.returncode == 0
+    assert "old.md" in result.stdout
+    assert "new.md" not in result.stdout
+
+    # And the inverse: within the last 30 days
+    result = run(["query", "status=done", "closed-at>30d"], tmp_path)
+    assert result.returncode == 0
+    assert "new.md" in result.stdout
+    assert "old.md" not in result.stdout
+
+
+def test_query_me_value(tmp_path):
+    """Query value `me` expands to the git user name."""
+    import subprocess as _sp
+
+    setup_flow(tmp_path)
+    try:
+        me = _sp.run(
+            ["git", "config", "user.name"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except _sp.CalledProcessError:
+        return  # no git user configured; skip silently
+    if not me:
+        return
+
+    (tmp_path / "mine.md").write_text(f"---\nstatus: draft\nauthor: {me}\n---\n# Mine\n")
+    (tmp_path / "yours.md").write_text("---\nstatus: draft\nauthor: someone-else\n---\n# Yours\n")
+
+    result = run(["query", "author=me"], tmp_path)
+    assert result.returncode == 0
+    assert "mine.md" in result.stdout
+    assert "yours.md" not in result.stdout
+
+
 def test_do_applies_transition_set_and_once_is_stable(tmp_path):
     import re as _re
 

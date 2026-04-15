@@ -261,6 +261,8 @@ Find documents by front matter fields. Predicates are ANDed:
 markstate query status=draft
 markstate query status=draft "created-at>2024-06-01"
 markstate query title~=api status!=done
+markstate query status=done "closed-at<30d"       # closed more than 30 days ago
+markstate query accepted-by=me "accepted-at>7d"   # things I accepted this week
 markstate query status=draft --json
 markstate query status=draft --dir path/to/docs
 ```
@@ -273,6 +275,17 @@ Supported operators:
 | `!=` | not equal |
 | `~=` | substring match (case-insensitive) |
 | `>` `<` `>=` `<=` | ordered comparison (numeric or string; ISO dates compare correctly) |
+
+The right-hand side of a predicate expands the same magic values as `--set`, plus a few relative forms useful for time queries:
+
+| RHS value | Expands to |
+|---|---|
+| `now` | current UTC timestamp (`YYYY-MM-DDTHH:MM:SSZ`) |
+| `today` | current UTC date (`YYYY-MM-DD`) |
+| `me` | git user name |
+| `Nd` / `Nw` / `Nm` / `Ny` | N days / weeks / months / years ago, as a date (months are 30d, years 365d — rough but good for audit queries) |
+
+Relative dates expand to `YYYY-MM-DD`, which compares lexicographically against stored full timestamps exactly as you'd expect — `closed-at<30d` captures everything strictly before midnight UTC on the threshold day.
 
 Searches recursively from `docs_root` (or cwd if no `flow.yml`). Add `--json` for machine-readable output.
 

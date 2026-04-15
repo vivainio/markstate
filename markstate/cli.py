@@ -5,6 +5,7 @@ import json
 import re
 import sys
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from importlib.metadata import version
 from pathlib import Path
 
@@ -17,6 +18,7 @@ FOCUS_FILE = ".markstate-focus"
 FOCUS_ENV_VAR = "MARKSTATE_FOCUS"
 
 _PRED_RE = re.compile(r'^([a-zA-Z0-9_-]+)(>=|<=|!=|~=|>|<|=)(.+)$')
+_REL_AGO_RE = re.compile(r'^(\d+)([dwmy])$')
 
 _focus_override: str | None = None
 
@@ -625,6 +627,34 @@ def _cmd_next_task(args: argparse.Namespace) -> None:
         _create_auto_docs(entered, config, directory)
 
 
+def _resolve_query_value(value: str) -> str:
+    """Expand right-hand-side magic values in `query` predicates.
+
+    `now`    → current UTC timestamp in ISO 8601 (`YYYY-MM-DDTHH:MM:SSZ`)
+    `today`  → current UTC date (`YYYY-MM-DD`)
+    `me`     → git user name
+    `Nd` / `Nw` / `Nm` / `Ny` → N days/weeks/months/years ago, as a date
+                                (`YYYY-MM-DD`). Months are 30d, years 365d
+                                — rough but good enough for audit queries.
+
+    Date strings compare correctly (lexicographically) against stored
+    full timestamps, so `completed-at<30d` captures everything before
+    midnight UTC on the threshold day.
+    """
+    if value == "now":
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if value == "today":
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if value == "me":
+        return engine.resolve_magic("me")
+    m = _REL_AGO_RE.match(value)
+    if m:
+        n = int(m.group(1))
+        days = {"d": n, "w": 7 * n, "m": 30 * n, "y": 365 * n}[m.group(2)]
+        return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    return value
+
+
 def _eval_predicate(actual: object, op: str, value: str) -> bool:
     actual_str = str(actual)
     if op == "=":
@@ -669,7 +699,7 @@ def _cmd_query(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
-        predicates.append((m.group(1), m.group(2), m.group(3)))
+        predicates.append((m.group(1), m.group(2), _resolve_query_value(m.group(3))))
 
     results: list[tuple[Path, frontmatter.Document]] = []
     exclude = config.exclude_dirs if config else None
