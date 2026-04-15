@@ -299,6 +299,19 @@ gate not satisfied:
   - spec.md must have status 'approved'
 ```
 
+### `upgrade`
+
+Replace the project's `flow.yml` with a newer version (e.g. from an updated skill's bundled resources). Walks up from cwd to find the current `flow.yml`, follows any `redirect:` chain to the final real file, then overwrites it:
+
+```
+markstate upgrade ~/.claude/skills/universal/bu-sdd/resources/flow.yml
+# upgraded /path/to/project/flow.yml
+#   source: /home/me/.claude/skills/universal/bu-sdd/resources/flow.yml
+#   changes: +12 -3
+```
+
+Use `--dry-run` to see the line add/remove count without writing. Errors out if the source doesn't parse as YAML, or if no `flow.yml` is found to upgrade.
+
 ## Trying it without visible marks
 
 To experiment without touching the repo visibly, point `init` at an existing `flow.yml` (a sample, a colleague's, a cloned example) and pass `--hidden`:

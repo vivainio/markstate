@@ -125,6 +125,29 @@ def find_and_load(start: Path | None = None) -> FlowConfig:
     return _load(path)
 
 
+def find_flow_target(start: Path | None = None) -> Path:
+    """Walk up from start to find flow.yml, follow any redirect chain,
+    and return the Path of the final real flow file.
+
+    Raises FileNotFoundError if no flow.yml is found upward from start.
+    Raises ValueError if redirects cycle.
+    """
+    path = _find(start or Path.cwd())
+    if path is None:
+        raise FileNotFoundError(f"{CONFIG_FILENAME} not found in {start or Path.cwd()} or any parent")
+    seen: set[Path] = set()
+    while True:
+        resolved = path.resolve()
+        if resolved in seen:
+            raise ValueError(f"redirect cycle involving {resolved}")
+        seen.add(resolved)
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        redirect = raw.get("redirect")
+        if not redirect:
+            return path
+        path = (path.parent / redirect).resolve()
+
+
 def _find(start: Path) -> Path | None:
     for directory in [start, *start.parents]:
         for name in (CONFIG_FILENAME, HIDDEN_CONFIG_PATH):

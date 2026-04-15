@@ -393,6 +393,76 @@ def test_cli_unset_flag_removes_field(tmp_path):
     assert "note:" not in (tmp_path / "spec.md").read_text()
 
 
+def test_upgrade_replaces_flow(tmp_path):
+    """`upgrade` overwrites the found flow.yml with contents of the source file."""
+    setup_flow(tmp_path)
+    source = tmp_path / "source-flow.yml"
+    source.write_text(TASKS_FLOW)
+
+    result = run(["upgrade", str(source)], tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "flow.yml").read_text() == TASKS_FLOW
+    assert "upgraded" in result.stdout
+
+
+def test_upgrade_follows_redirect(tmp_path):
+    """`upgrade` writes to the redirect target, not the stub."""
+    real = tmp_path / "real"
+    real.mkdir()
+    stub = tmp_path / "stub"
+    stub.mkdir()
+    real_flow = real / "flow.yml"
+    real_flow.write_text(SIMPLE_FLOW)
+    (stub / "flow.yml").write_text("redirect: ../real/flow.yml\n")
+
+    source = tmp_path / "source-flow.yml"
+    source.write_text(TASKS_FLOW)
+
+    result = run(["upgrade", str(source)], stub)
+    assert result.returncode == 0, result.stderr
+    # stub is unchanged, target was rewritten
+    assert "redirect" in (stub / "flow.yml").read_text()
+    assert real_flow.read_text() == TASKS_FLOW
+
+
+def test_upgrade_dry_run(tmp_path):
+    setup_flow(tmp_path)
+    source = tmp_path / "source-flow.yml"
+    source.write_text(TASKS_FLOW)
+
+    result = run(["upgrade", str(source), "--dry-run"], tmp_path)
+    assert result.returncode == 0
+    assert "would upgrade" in result.stdout
+    assert (tmp_path / "flow.yml").read_text() == SIMPLE_FLOW, "flow.yml must not be touched in dry-run"
+
+
+def test_upgrade_noop_when_identical(tmp_path):
+    setup_flow(tmp_path)
+    source = tmp_path / "source-flow.yml"
+    source.write_text(SIMPLE_FLOW)
+
+    result = run(["upgrade", str(source)], tmp_path)
+    assert result.returncode == 0
+    assert "already up to date" in result.stdout
+
+
+def test_upgrade_errors_when_no_flow(tmp_path):
+    source = tmp_path / "source-flow.yml"
+    source.write_text(SIMPLE_FLOW)
+    result = run(["upgrade", str(source)], tmp_path)
+    assert result.returncode == 1
+    assert "no flow.yml found" in result.stderr
+
+
+def test_upgrade_errors_on_invalid_yaml(tmp_path):
+    setup_flow(tmp_path)
+    bad = tmp_path / "bad.yml"
+    bad.write_text("phases:\n  - name: x\n    bad: [unterminated\n")
+    result = run(["upgrade", str(bad)], tmp_path)
+    assert result.returncode == 1
+    assert "does not parse as YAML" in result.stderr
+
+
 def test_query_relative_dates(tmp_path):
     """Right-hand side of query predicates expands Nd/Nw/Nm/Ny relative dates."""
     from datetime import datetime, timedelta, timezone
