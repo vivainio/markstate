@@ -21,6 +21,7 @@ class Transition:
     name: str
     from_state: str
     to_state: str
+    set_fields: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -37,6 +38,7 @@ class ProducedDoc:
     file: str
     template: str | None = None
     auto: bool = False
+    set_fields: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -181,7 +183,12 @@ def _parse_phase(raw: dict) -> Phase:
 def _parse_produced_doc(raw: str | dict) -> ProducedDoc:
     if isinstance(raw, str):
         return ProducedDoc(file=raw)
-    return ProducedDoc(file=raw["file"], template=raw.get("template"), auto=raw.get("auto", False))
+    return ProducedDoc(
+        file=raw["file"],
+        template=raw.get("template"),
+        auto=raw.get("auto", False),
+        set_fields=dict(raw.get("set") or {}),
+    )
 
 
 def _parse_produced_dir(raw: dict) -> ProducedDir:
@@ -196,6 +203,7 @@ def _parse_transition(raw: dict) -> Transition:
         name=raw["name"],
         from_state=raw["from"],
         to_state=raw["to"],
+        set_fields=dict(raw.get("set") or {}),
     )
 
 

@@ -242,6 +242,62 @@ transitions: []
     assert [p.name for p in cfg.phases_for(tmp_path.parent)] == ["drafting", "done"]
 
 
+def test_parse_transition_set_fields(tmp_path):
+    write_flow(tmp_path, """
+phases: []
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+    set:
+      accepted-at: now
+      accepted-by: me
+      once-first-accepted-at: now
+""")
+    cfg = find_and_load(tmp_path)
+    t = cfg.transition("accept")
+    assert t.set_fields == {
+        "accepted-at": "now",
+        "accepted-by": "me",
+        "once-first-accepted-at": "now",
+    }
+
+
+def test_parse_produced_doc_set_fields(tmp_path):
+    write_flow(tmp_path, """
+phases:
+  - name: drafting
+    produces:
+      - file: proposal.md
+        template: "---\\nstatus: draft\\n---\\n"
+        set:
+          created-at: now
+          author: me
+transitions: []
+""")
+    cfg = find_and_load(tmp_path)
+    entry = cfg.phases[0].produces[0]
+    assert entry.set_fields == {"created-at": "now", "author": "me"}
+
+
+def test_parse_produced_dir_file_set_fields(tmp_path):
+    write_flow(tmp_path, """
+phases:
+  - name: drafting
+    produces:
+      - dir: changes/<change>
+        files:
+          - file: proposal.md
+            template: "---\\nstatus: draft\\n---\\n"
+            set:
+              created-at: today
+transitions: []
+""")
+    cfg = find_and_load(tmp_path)
+    entry = cfg.phases[0].produces[0]
+    assert entry.files[0].set_fields == {"created-at": "today"}
+
+
 def test_parse_produced_dir(tmp_path):
     write_flow(tmp_path, """
 phases:

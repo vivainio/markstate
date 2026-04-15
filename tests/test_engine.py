@@ -353,3 +353,102 @@ def test_describe_condition_file_tasks():
 def test_describe_condition_glob_tasks():
     c = Condition(glob="*/tasks.md", tasks="all_done")
     assert "*/tasks.md" in engine.describe_condition(c)
+
+
+# --- resolve_magic ---
+
+
+def test_resolve_magic_passthrough():
+    assert engine.resolve_magic("literal") == "literal"
+
+
+def test_resolve_magic_now_is_iso_utc():
+    import re as _re
+
+    out = engine.resolve_magic("now")
+    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", out), out
+
+
+def test_resolve_magic_today_is_iso_date():
+    import re as _re
+
+    out = engine.resolve_magic("today")
+    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}", out), out
+
+
+# --- apply_fields ---
+
+
+def test_apply_fields_overwrites(tmp_path):
+    p = tmp_path / "x.md"
+    write_md(p, status="draft")
+    doc = engine.frontmatter.load(p)
+    engine.apply_fields(doc, {"reviewer": "alice"})
+    doc.save()
+    assert engine.frontmatter.load(p).get("reviewer") == "alice"
+    # Overwrite
+    doc = engine.frontmatter.load(p)
+    engine.apply_fields(doc, {"reviewer": "bob"})
+    doc.save()
+    assert engine.frontmatter.load(p).get("reviewer") == "bob"
+
+
+def test_apply_fields_once_prefix_writes_first_time_only(tmp_path):
+    p = tmp_path / "x.md"
+    write_md(p, status="draft")
+    doc = engine.frontmatter.load(p)
+    engine.apply_fields(doc, {"once-first-accepted-at": "2026-01-01"})
+    doc.save()
+    loaded = engine.frontmatter.load(p)
+    assert loaded.get("first-accepted-at") == "2026-01-01"
+    # Second application must not overwrite
+    engine.apply_fields(loaded, {"once-first-accepted-at": "2026-09-09"})
+    loaded.save()
+    assert engine.frontmatter.load(p).get("first-accepted-at") == "2026-01-01"
+
+
+def test_apply_fields_expands_today(tmp_path):
+    import re as _re
+
+    p = tmp_path / "x.md"
+    write_md(p, status="draft")
+    doc = engine.frontmatter.load(p)
+    engine.apply_fields(doc, {"stamp": "today"})
+    doc.save()
+    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(engine.frontmatter.load(p).get("stamp")))
+
+
+# --- do_transition with set_fields ---
+
+
+def test_do_transition_applies_set_fields(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[Transition("accept", "draft", "accepted", set_fields={"reviewer": "alice"})],
+    )
+    write_md(tmp_path / "spec.md", status="draft")
+    engine.do_transition("accept", tmp_path / "spec.md", cfg)
+    doc = engine.frontmatter.load(tmp_path / "spec.md")
+    assert doc.get("status") == "accepted"
+    assert doc.get("reviewer") == "alice"
+
+
+def test_do_transition_once_field_preserved_on_reapply(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[
+            Transition("accept", "draft", "accepted", set_fields={"once-first-accepted-at": "today"}),
+            Transition("reopen", "accepted", "draft"),
+        ],
+    )
+    spec = tmp_path / "spec.md"
+    write_md(spec, status="draft")
+    engine.do_transition("accept", spec, cfg)
+    first = engine.frontmatter.load(spec).get("first-accepted-at")
+    assert first is not None
+    # Reopen, then accept again — first-accepted-at must stay the same
+    engine.do_transition("reopen", spec, cfg)
+    engine.do_transition("accept", spec, cfg)
+    assert engine.frontmatter.load(spec).get("first-accepted-at") == first

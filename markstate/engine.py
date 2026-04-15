@@ -1,5 +1,7 @@
 """State engine: evaluate conditions and execute transitions."""
 
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 from markstate import frontmatter
@@ -12,6 +14,42 @@ class TransitionError(Exception):
 
 class TaskNotFoundError(Exception):
     pass
+
+
+_ONCE_PREFIX = "once-"
+
+
+def resolve_magic(value: str) -> str:
+    """Expand magic field values: 'me', 'now', 'today'. Other values pass through."""
+    if value == "me":
+        try:
+            return subprocess.run(
+                ["git", "config", "user.name"], capture_output=True, text=True, check=True
+            ).stdout.strip()
+        except subprocess.CalledProcessError:
+            return value
+    if value == "now":
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if value == "today":
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return value
+
+
+def apply_fields(doc: frontmatter.Document, fields: dict[str, str]) -> None:
+    """Apply fields to doc's frontmatter. Magic values ('me', 'now', 'today') are expanded.
+
+    A key prefixed with 'once-' writes to the unprefixed name only if that field
+    is currently absent (e.g. 'once-first-accepted-at' sets 'first-accepted-at'
+    the first time, but does not overwrite on later invocations).
+    """
+    for key, value in fields.items():
+        resolved = resolve_magic(str(value))
+        if key.startswith(_ONCE_PREFIX):
+            actual = key[len(_ONCE_PREFIX):]
+            if doc.get(actual) is None:
+                doc.set(actual, resolved)
+        else:
+            doc.set(key, resolved)
 
 
 def current_phase(config: FlowConfig, directory: Path) -> Phase | None:
@@ -47,6 +85,7 @@ def do_transition(transition_name: str, target: Path, config: FlowConfig) -> tup
         )
 
     doc.set(config.status_field, t.to_state)
+    apply_fields(doc, t.set_fields)
     doc.save()
     return current, t.to_state
 

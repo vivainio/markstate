@@ -275,3 +275,72 @@ def test_focus_fuzzy_no_match(tmp_path):
     result = run(["focus", "PROJ-999"], tmp_path)
     assert result.returncode == 1
     assert "error" in result.stderr
+
+
+# --- flow-level set: annotations ---
+
+
+SET_FLOW = """\
+phases:
+  - name: drafting
+    produces:
+      - file: spec.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Spec
+        set:
+          created-at: today
+          once-first-touched-at: today
+    advance_when:
+      - file: spec.md
+        status: accepted
+
+  - name: done
+    gates:
+      - file: spec.md
+        status: accepted
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+    set:
+      accepted-at: now
+      once-first-accepted-at: now
+  - name: reopen
+    from: accepted
+    to: draft
+"""
+
+
+def test_new_applies_produces_set_fields(tmp_path):
+    setup_flow(tmp_path, SET_FLOW)
+    result = run(["new", "spec.md"], tmp_path)
+    assert result.returncode == 0, result.stderr
+    text = (tmp_path / "spec.md").read_text()
+    assert "created-at:" in text
+    assert "first-touched-at:" in text
+
+
+def test_do_applies_transition_set_and_once_is_stable(tmp_path):
+    import re as _re
+
+    setup_flow(tmp_path, SET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    assert run(["do", "accept", "spec.md"], tmp_path).returncode == 0
+    first_text = (tmp_path / "spec.md").read_text()
+    m = _re.search(r"^first-accepted-at:\s*(\S+)", first_text, _re.MULTILINE)
+    assert m, first_text
+    first_ts = m.group(1)
+
+    assert run(["do", "reopen", "spec.md"], tmp_path).returncode == 0
+    assert run(["do", "accept", "spec.md"], tmp_path).returncode == 0
+    second_text = (tmp_path / "spec.md").read_text()
+    m2 = _re.search(r"^first-accepted-at:\s*(\S+)", second_text, _re.MULTILINE)
+    assert m2
+    assert m2.group(1) == first_ts, "once- field should not be overwritten on re-accept"
+    # accepted-at (non-once) must update on every accept
+    assert "accepted-at:" in second_text

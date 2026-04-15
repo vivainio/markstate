@@ -12,6 +12,17 @@
 #       migrate-db/
 #         plan.md
 
+# Shared annotation blocks, reused via YAML aliases (*name) below.
+# Keys under `_anchors` are ignored by markstate.
+_anchors:
+  creation: &creation
+    once-created-at: now
+    once-created-by: me
+  acceptance: &acceptance
+    accepted-at: now
+    accepted-by: me
+    once-first-accepted-at: now
+
 phases:
   # --- changes track: drafting → speccing → implementing → done ---
 
@@ -31,6 +42,7 @@ phases:
               ## Problem
 
               ## Solution
+            set: *creation
     advance_when:
       - file: proposal.md
         status: accepted
@@ -49,6 +61,7 @@ phases:
 
           # Specification
         auto: true
+        set: *creation
     advance_when:
       - file: spec.md
         status: accepted
@@ -64,6 +77,7 @@ phases:
           # Tasks
           - [ ]
         auto: true
+        set: *creation
     advance_when:
       - file: tasks.md
         tasks: all_done
@@ -88,6 +102,7 @@ phases:
               ---
 
               # Plan
+            set: *creation
     advance_when:
       - file: plan.md
         status: accepted
@@ -102,6 +117,7 @@ transitions:
   - name: accept
     from: draft
     to: accepted
+    set: *acceptance
   - name: reopen
     from: accepted
     to: draft

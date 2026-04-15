@@ -3,10 +3,8 @@
 import argparse
 import json
 import re
-import subprocess
 import sys
 import urllib.request
-from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
 
@@ -23,19 +21,6 @@ _PRED_RE = re.compile(r'^([a-zA-Z0-9_-]+)(>=|<=|!=|~=|>|<|=)(.+)$')
 _focus_override: str | None = None
 
 
-def _resolve_magic(value: str) -> str:
-    if value == "me":
-        try:
-            return subprocess.run(
-                ["git", "config", "user.name"], capture_output=True, text=True, check=True
-            ).stdout.strip()
-        except subprocess.CalledProcessError:
-            return value
-    if value == "now":
-        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return value
-
-
 def _parse_set_args(set_args: list[str]) -> dict[str, str]:
     result = {}
     for item in set_args:
@@ -43,14 +28,14 @@ def _parse_set_args(set_args: list[str]) -> dict[str, str]:
             print(f"error: --set value must be key=value, got '{item}'", file=sys.stderr)
             sys.exit(1)
         key, _, value = item.partition("=")
-        result[key] = _resolve_magic(value)
+        result[key] = value
     return result
 
 
 def _add_set_arg(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--set", metavar="KEY=VALUE", action="append", default=[],
-        help="Set extra frontmatter fields ('me' = git user, 'now' = UTC timestamp)",
+        help="Set extra frontmatter fields ('me' = git user, 'now' = UTC timestamp, 'today' = UTC date). Prefix key with 'once-' to write only when absent.",
     )
 
 
@@ -58,8 +43,7 @@ def _apply_extra_fields(path: Path, fields: dict[str, str]) -> None:
     if not fields:
         return
     doc = frontmatter.load(path)
-    for key, value in fields.items():
-        doc.set(key, value)
+    engine.apply_fields(doc, fields)
     doc.save()
 
 
@@ -339,6 +323,7 @@ def _write_doc(doc: ProducedDoc, target: Path, force: bool) -> None:
         sys.exit(1)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(doc.template, encoding="utf-8")
+    _apply_extra_fields(target, doc.set_fields)
     print(f"created {target}")
 
 
@@ -360,6 +345,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
             if not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(entry.template, encoding="utf-8")
+                _apply_extra_fields(dest, entry.set_fields)
                 print(f"created {dest.relative_to(Path.cwd())}")
         elif isinstance(entry, ProducedDir):
             # Auto-create files inside existing directories matching the pattern.
@@ -376,6 +362,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                     if not dest.exists():
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_text(f.template, encoding="utf-8")
+                        _apply_extra_fields(dest, f.set_fields)
                         print(f"created {dest.relative_to(Path.cwd())}")
 
 

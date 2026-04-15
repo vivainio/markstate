@@ -116,12 +116,49 @@ markstate set approved spec.md --set approved_by=me
 markstate new proposal.md --set author=me --set created_at=now
 ```
 
-Two magic values are expanded automatically:
+Magic values are expanded automatically:
 
 | Value | Expands to |
 |---|---|
 | `me` | Git user name (`git config user.name`) |
 | `now` | UTC timestamp in ISO 8601 format (`2026-03-28T12:00:00Z`) |
+| `today` | UTC date (`2026-03-28`) |
+
+Prefix a key with `once-` to write only when the target field is currently absent. The prefix is stripped from the written key, so `--set once-first-accepted-at=now` writes `first-accepted-at` on the first application and is a no-op afterwards.
+
+### Flow-level annotations: `set:` in `flow.yml`
+
+Transitions and produced documents can declare a `set:` block whose key/value pairs are written whenever the transition fires or the document is materialized. Values use the same magic vocabulary as `--set` (`me`, `now`, `today`) and the same `once-` prefix:
+
+```yaml
+phases:
+  - name: drafting
+    produces:
+      - file: proposal.md
+        template: |
+          ---
+          status: draft
+          ---
+        set:
+          created-at: now
+          author: me
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+    set:
+      accepted-at: now
+      accepted-by: me
+      once-first-accepted-at: now   # keeps the original timestamp across re-accepts
+  - name: reopen
+    from: accepted
+    to: draft
+    set:
+      reopened-at: now
+```
+
+A transition's `set:` fields are applied together with the status change. Plain keys overwrite on every application; `once-` keys set the unprefixed name only if it is currently absent. CLI `--set key=value` still takes precedence over flow-level `set:` for the same key.
 
 ### `status`
 

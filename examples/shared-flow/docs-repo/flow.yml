@@ -3,6 +3,17 @@
 
 docs_root: changes
 
+# Shared annotation blocks, reused via YAML aliases (*name) below.
+# Keys under `_anchors` are ignored by markstate.
+_anchors:
+  creation: &creation
+    once-created-at: now
+    once-created-by: me
+  acceptance: &acceptance
+    accepted-at: now
+    accepted-by: me
+    once-first-accepted-at: now
+
 phases:
   - name: drafting
     produces:
@@ -13,6 +24,7 @@ phases:
           ---
 
           # Proposal
+        set: *creation
     advance_when:
       - file: proposal.md
         status: accepted
@@ -27,6 +39,7 @@ phases:
           # Tasks
           - [ ]
         auto: true
+        set: *creation
     advance_when:
       - file: tasks.md
         tasks: all_done
@@ -40,6 +53,7 @@ transitions:
   - name: accept
     from: draft
     to: accepted
+    set: *acceptance
   - name: reopen
     from: accepted
     to: draft

@@ -15,6 +15,17 @@
 
 docs_root: changes
 
+# Shared annotation blocks, reused via YAML aliases (*name) below.
+# Keys under `_anchors` are ignored by markstate.
+_anchors:
+  creation: &creation
+    once-created-at: now
+    once-created-by: me
+  acceptance: &acceptance
+    accepted-at: now
+    accepted-by: me
+    once-first-accepted-at: now
+
 phases:
   - name: speccing
     produces:
@@ -34,6 +45,7 @@ phases:
 
           <!-- In scope: -->
           <!-- Out of scope: -->
+        set: *creation
       - file: design.md
         template: |
           ---
@@ -49,6 +61,7 @@ phases:
           ## Affected areas
 
           <!-- Files, modules, APIs, or systems that will change. -->
+        set: *creation
       - dir: "<change>/specs/<area>"
         files:
           - file: spec.md
@@ -67,6 +80,7 @@ phases:
               ## MODIFIED Requirements
 
               ## REMOVED Requirements
+            set: *creation
     advance_when:
       - file: proposal.md
         status: accepted
@@ -90,6 +104,7 @@ phases:
 
           - [ ]
         auto: true
+        set: *creation
     advance_when:
       - file: tasks.md
         tasks: all_done
@@ -103,6 +118,7 @@ transitions:
   - name: accept
     from: draft
     to: accepted
+    set: *acceptance
   - name: reopen
     from: accepted
     to: draft
