@@ -129,6 +129,9 @@ def find_flow_target(start: Path | None = None) -> Path:
     """Walk up from start to find flow.yml, follow any redirect chain,
     and return the Path of the final real flow file.
 
+    Files with ``use:`` are returned as-is (they are the anchor, not a
+    redirect).
+
     Raises FileNotFoundError if no flow.yml is found upward from start.
     Raises ValueError if redirects cycle.
     """
@@ -148,6 +151,12 @@ def find_flow_target(start: Path | None = None) -> Path:
         path = (path.parent / redirect).resolve()
 
 
+def has_use(path: Path) -> bool:
+    """Return True if the flow file at *path* contains a ``use:`` directive."""
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return "use" in raw
+
+
 def _find(start: Path) -> Path | None:
     for directory in [start, *start.parents]:
         for name in (CONFIG_FILENAME, HIDDEN_CONFIG_PATH):
@@ -163,25 +172,36 @@ def _load(path: Path) -> FlowConfig:
         target = (path.parent / raw["redirect"]).resolve()
         return _load(target)
 
-    phases = [_parse_phase(p) for p in raw.get("phases", [])]
-    transitions = [_parse_transition(t) for t in raw.get("transitions", [])]
-
     config_dir = path.parent
-    docs_root_raw = raw.get("docs_root")
+
+    if "use" in raw:
+        use_path = Path(raw["use"]).expanduser()
+        if not use_path.is_absolute():
+            use_path = (config_dir / use_path).resolve()
+        base = yaml.safe_load(use_path.read_text(encoding="utf-8"))
+        # Local keys override the imported definition
+        merged = {**base, **{k: v for k, v in raw.items() if k != "use"}}
+    else:
+        merged = raw
+
+    phases = [_parse_phase(p) for p in merged.get("phases", [])]
+    transitions = [_parse_transition(t) for t in merged.get("transitions", [])]
+
+    docs_root_raw = merged.get("docs_root")
     if docs_root_raw is not None:
         docs_root = (config_dir / docs_root_raw).resolve()
     else:
         docs_root = config_dir
 
     exclude_dirs = set(_DEFAULT_EXCLUDE_DIRS)
-    extra = raw.get("exclude_dirs")
+    extra = merged.get("exclude_dirs")
     if extra:
         exclude_dirs.update(extra)
 
     return FlowConfig(
         root=config_dir,
         docs_root=docs_root,
-        status_field=raw.get("status_field", "status"),
+        status_field=merged.get("status_field", "status"),
         phases=phases,
         transitions=transitions,
         exclude_dirs=exclude_dirs,

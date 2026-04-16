@@ -39,6 +39,32 @@ def test_serialize_round_trip():
     assert body2 == body
 
 
+def test_serialize_status_first():
+    fm = {"title": "Test", "author": "me", "status": "draft"}
+    text = _serialize(fm, "# Hello\n", first_keys=("status",))
+    lines = text.split("\n")
+    # First line after opening --- should be status
+    assert lines[1] == "status: draft"
+
+
+def test_serialize_first_keys_preserves_rest_order():
+    fm = {"zebra": "z", "alpha": "a", "status": "done"}
+    text = _serialize(fm, "", first_keys=("status",))
+    lines = [l for l in text.split("\n") if ": " in l]
+    assert lines[0] == "status: done"
+    # Rest should be in original insertion order, not alphabetical
+    assert lines[1] == "zebra: z"
+    assert lines[2] == "alpha: a"
+
+
+def test_serialize_first_keys_missing_key():
+    """first_keys that aren't in the dict are silently skipped."""
+    fm = {"title": "Test"}
+    text = _serialize(fm, "", first_keys=("status",))
+    assert "title: Test" in text
+    assert "status" not in text
+
+
 def test_serialize_empty_frontmatter():
     assert _serialize({}, "# Hello\n") == "# Hello\n"
 

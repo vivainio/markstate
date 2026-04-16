@@ -89,6 +89,7 @@ def do_transition(transition_name: str, target: Path, config: FlowConfig) -> tup
         )
 
     doc = frontmatter.load(target)
+    doc.first_keys = (config.status_field,)
     current = str(doc.get(config.status_field) or "")
 
     if current != t.from_state:

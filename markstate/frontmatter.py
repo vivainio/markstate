@@ -22,6 +22,7 @@ class Document:
     path: Path
     front_matter: dict[str, object] = field(default_factory=dict)
     body: str = ""
+    first_keys: tuple[str, ...] = ("status",)
 
     def get(self, key: str) -> object | None:
         return self.front_matter.get(key)
@@ -33,7 +34,10 @@ class Document:
         self.front_matter.pop(key, None)
 
     def save(self) -> None:
-        self.path.write_text(_serialize(self.front_matter, self.body), encoding="utf-8")
+        self.path.write_text(
+            _serialize(self.front_matter, self.body, first_keys=self.first_keys),
+            encoding="utf-8",
+        )
 
 
 def count_tasks(text: str) -> tuple[int, int]:
@@ -87,8 +91,25 @@ def _parse(text: str) -> tuple[dict[str, object], str]:
     return yaml.safe_load(raw) or {}, body
 
 
-def _serialize(front_matter: dict[str, object], body: str) -> str:
+def _reorder(front_matter: dict[str, object], first_keys: tuple[str, ...]) -> dict[str, object]:
+    """Return a new dict with first_keys at the top, rest in original order."""
+    ordered: dict[str, object] = {}
+    for k in first_keys:
+        if k in front_matter:
+            ordered[k] = front_matter[k]
+    for k, v in front_matter.items():
+        if k not in ordered:
+            ordered[k] = v
+    return ordered
+
+
+def _serialize(
+    front_matter: dict[str, object],
+    body: str,
+    first_keys: tuple[str, ...] = (),
+) -> str:
     if not front_matter:
         return body
-    raw = yaml.dump(front_matter, default_flow_style=False, allow_unicode=True)
+    ordered = _reorder(front_matter, first_keys) if first_keys else front_matter
+    raw = yaml.dump(ordered, default_flow_style=False, sort_keys=False, allow_unicode=True)
     return f"{DELIMITER}\n{raw}{DELIMITER}\n{body}"

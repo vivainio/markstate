@@ -144,6 +144,19 @@ def test_do_applies_move(tmp_path):
     assert "approved" in result.stdout
 
 
+def test_do_puts_status_first_in_frontmatter(tmp_path):
+    setup_flow(tmp_path)
+    # Status is NOT first in the input
+    (tmp_path / "spec.md").write_text("---\nauthor: me\nstatus: draft\n---\n# Spec\n")
+    result = run(["do", "approve", "spec.md"], tmp_path)
+    assert result.returncode == 0
+    content = (tmp_path / "spec.md").read_text()
+    lines = content.split("\n")
+    # After opening ---, status should come first
+    assert lines[1] == "status: approved"
+    assert "author: me" in content
+
+
 def test_do_reports_phase_transition(tmp_path):
     setup_flow(tmp_path)
     (tmp_path / "spec.md").write_text("---\nstatus: draft\n---\n# Spec\n")
@@ -451,6 +464,24 @@ def test_init_noop_when_source_identical(tmp_path):
     result = run(["init", str(source)], tmp_path)
     assert result.returncode == 0
     assert "already up to date" in result.stdout
+
+
+def test_init_skips_when_use_directive(tmp_path):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "flow.yml").write_text(SIMPLE_FLOW)
+
+    project = tmp_path / "project"
+    project.mkdir()
+    use_content = f"use: {shared / 'flow.yml'}\n"
+    (project / "flow.yml").write_text(use_content)
+
+    result = run(["init"], project)
+    assert result.returncode == 0
+    assert "use:" in result.stdout
+    assert "skipping" in result.stdout
+    # File should be unchanged
+    assert (project / "flow.yml").read_text() == use_content
 
 
 def test_init_errors_on_invalid_yaml(tmp_path):

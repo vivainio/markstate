@@ -23,6 +23,7 @@ from markstate.config import (
     filtered_rglob,
     find_and_load,
     find_flow_target,
+    has_use,
 )
 from markstate.engine import TaskNotFoundError, TransitionError
 
@@ -61,10 +62,12 @@ def _apply_frontmatter_edits(
     path: Path,
     set_fields: dict[str, str],
     unset_fields: list[str] | tuple[str, ...] = (),
+    status_field: str = "status",
 ) -> None:
     if not set_fields and not unset_fields:
         return
     doc = frontmatter.load(path)
+    doc.first_keys = (status_field,)
     engine.unset_keys(doc, unset_fields)
     engine.apply_fields(doc, set_fields)
     doc.save()
@@ -290,6 +293,9 @@ def _cmd_init(args: argparse.Namespace) -> None:
             sys.exit(1)
 
     if existing is not None:
+        if has_use(existing):
+            print(f"{existing} uses 'use:' directive, skipping update")
+            return
         if args.hidden:
             print(
                 f"error: flow.yml already exists at {existing}; --hidden can't convert in place",
@@ -344,8 +350,8 @@ def _cmd_new(args: argparse.Namespace) -> None:
                   f"Available: {', '.join(available)}", file=sys.stderr)
             sys.exit(1)
         target = cwd / args.file
-        _write_doc(produced, target, args.force)
-        _apply_frontmatter_edits(target, extra, extra_unset)
+        _write_doc(produced, target, args.force, config.status_field)
+        _apply_frontmatter_edits(target, extra, extra_unset, config.status_field)
         return
 
     # Build candidate base directories to try, in priority order.
@@ -377,13 +383,13 @@ def _cmd_new(args: argparse.Namespace) -> None:
         for phase in config.phases:
             for entry in phase.produces:
                 if isinstance(entry, ProducedDoc) and entry.file == args.file:
-                    _write_doc(entry, resolved, args.force)
-                    _apply_frontmatter_edits(resolved, extra, extra_unset)
+                    _write_doc(entry, resolved, args.force, config.status_field)
+                    _apply_frontmatter_edits(resolved, extra, extra_unset, config.status_field)
                     return
                 if isinstance(entry, ProducedDir) and rel.match(entry.glob_pattern):
                     _write_dir_files(entry.files, resolved, args.force)
                     for f in entry.files:
-                        _apply_frontmatter_edits(resolved / f.file, extra, extra_unset)
+                        _apply_frontmatter_edits(resolved / f.file, extra, extra_unset, config.status_field)
                     return
     # Collect all producible patterns for the hint
     hints = []
@@ -401,7 +407,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
     sys.exit(1)
 
 
-def _write_doc(doc: ProducedDoc, target: Path, force: bool) -> None:
+def _write_doc(doc: ProducedDoc, target: Path, force: bool, status_field: str = "status") -> None:
     if doc.template is None:
         print(f"error: '{target.name}' has no template defined", file=sys.stderr)
         sys.exit(1)
@@ -410,7 +416,7 @@ def _write_doc(doc: ProducedDoc, target: Path, force: bool) -> None:
         sys.exit(1)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(doc.template, encoding="utf-8")
-    _apply_frontmatter_edits(target, doc.set_fields, doc.unset_fields)
+    _apply_frontmatter_edits(target, doc.set_fields, doc.unset_fields, status_field)
     print(f"created {target}")
 
 
@@ -432,7 +438,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
             if not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(entry.template, encoding="utf-8")
-                _apply_frontmatter_edits(dest, entry.set_fields, entry.unset_fields)
+                _apply_frontmatter_edits(dest, entry.set_fields, entry.unset_fields, config.status_field)
                 print(f"created {dest.relative_to(Path.cwd())}")
         elif isinstance(entry, ProducedDir):
             # Auto-create files inside existing directories matching the pattern.
@@ -449,7 +455,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                     if not dest.exists():
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_text(f.template, encoding="utf-8")
-                        _apply_frontmatter_edits(dest, f.set_fields, f.unset_fields)
+                        _apply_frontmatter_edits(dest, f.set_fields, f.unset_fields, config.status_field)
                         print(f"created {dest.relative_to(Path.cwd())}")
 
 
@@ -484,6 +490,7 @@ def _cmd_set(args: argparse.Namespace) -> None:
             print(f"error: '{t}' does not exist", file=sys.stderr)
             sys.exit(1)
         doc = frontmatter.load(target)
+        doc.first_keys = (status_field,)
         old = str(doc.get(status_field) or "")
         doc.set(status_field, args.status)
         engine.unset_keys(doc, args.unset)
@@ -512,7 +519,7 @@ def _cmd_do(args: argparse.Namespace) -> None:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    _apply_frontmatter_edits(target, _parse_set_args(args.set), list(args.unset))
+    _apply_frontmatter_edits(target, _parse_set_args(args.set), list(args.unset), config.status_field)
 
     phase_after = engine.current_phase(config, phase_dir)
     _report_transition(phase_before, phase_after, config, phase_dir)
@@ -833,7 +840,7 @@ def _cmd_check(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     print(f"  {result['file']}  [x] {result['task']}  ({result['done']}/{result['total']})")
-    _apply_frontmatter_edits(directory / result["file"], _parse_set_args(args.set), list(args.unset))
+    _apply_frontmatter_edits(directory / result["file"], _parse_set_args(args.set), list(args.unset), config.status_field)
 
     phase_after = engine.current_phase(config, directory)
     _report_transition(phase_before, phase_after, config, directory)

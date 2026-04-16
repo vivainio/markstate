@@ -333,6 +333,104 @@ transitions: []
     assert entry.files[0].set_fields == {"created-at": "today"}
 
 
+def test_use_imports_flow_definition(tmp_path):
+    """use: loads phases/transitions from another file but keeps local root."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "flow.yml").write_text(
+        "phases:\n"
+        "  - name: drafting\n"
+        "    produces:\n"
+        "      - file: spec.md\n"
+        "transitions:\n"
+        "  - name: approve\n"
+        "    from: draft\n"
+        "    to: approved\n"
+    )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text(f"use: {shared / 'flow.yml'}\n")
+
+    cfg = find_and_load(project)
+    assert cfg.root == project
+    assert cfg.docs_root == project
+    assert cfg.phase("drafting") is not None
+    assert cfg.transition("approve") is not None
+
+
+def test_use_local_docs_root_overrides(tmp_path):
+    """Local docs_root overrides the imported one."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "flow.yml").write_text(
+        "docs_root: shared-docs\nphases: []\ntransitions: []\n"
+    )
+
+    project = tmp_path / "project"
+    specs = project / "specs"
+    specs.mkdir(parents=True)
+    (project / "flow.yml").write_text(
+        f"use: {shared / 'flow.yml'}\ndocs_root: specs\n"
+    )
+
+    cfg = find_and_load(project)
+    assert cfg.root == project
+    assert cfg.docs_root == specs
+
+
+def test_use_relative_path(tmp_path):
+    """use: with a relative path resolves from the importing file's directory."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "flow.yml").write_text("phases: []\ntransitions: []\n")
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text("use: ../shared/flow.yml\n")
+
+    cfg = find_and_load(project)
+    assert cfg.root == project
+    assert cfg.phases == []
+
+
+def test_use_tilde_expansion(tmp_path, monkeypatch):
+    """use: expands ~ in the path."""
+    fake_home = tmp_path / "home"
+    skills = fake_home / ".claude" / "skills"
+    skills.mkdir(parents=True)
+    (skills / "flow.yml").write_text(
+        "status_field: state\nphases: []\ntransitions: []\n"
+    )
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text("use: ~/.claude/skills/flow.yml\n")
+
+    cfg = find_and_load(project)
+    assert cfg.status_field == "state"
+    assert cfg.root == project
+
+
+def test_use_local_status_field_overrides(tmp_path):
+    """Local status_field takes precedence over imported one."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "flow.yml").write_text(
+        "status_field: phase\nphases: []\ntransitions: []\n"
+    )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text(
+        f"use: {shared / 'flow.yml'}\nstatus_field: state\n"
+    )
+
+    cfg = find_and_load(project)
+    assert cfg.status_field == "state"
+
+
 def test_parse_produced_dir(tmp_path):
     write_flow(tmp_path, """
 phases:
