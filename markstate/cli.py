@@ -94,23 +94,35 @@ def _resolve_file(path_str: str, config: FlowConfig | None) -> Path:
     """Resolve a file path: absolute paths used as-is, relative paths resolved
     against doc base when config is available, otherwise against cwd.
 
-    When the base-resolved path does not exist, falls back to focus if set —
-    so ``markstate do accept plan.md`` from docs_root finds the file in the
-    focused directory instead of failing.
+    Resolution order: docs_root → doc_base (cwd or focus) → focus fallback.
+    This prevents path doubling when focus is a subdirectory and the user
+    passes a path relative to docs_root that already includes that subdirectory.
     """
     p = Path(path_str)
     if p.is_absolute():
         return p
     if config:
+        # Try docs_root first — handles full relative paths like
+        # "changes/area/name/proposal.md" regardless of focus.
+        docs_root_resolved = (config.docs_root / path_str).resolve()
+        if docs_root_resolved.exists():
+            return docs_root_resolved
+
+        # Try the doc base (cwd if inside docs_root, else focus).
         base = _resolve_doc_base(config)
         resolved = (base / path_str).resolve()
-        if not resolved.exists():
-            focus = _read_focus(config)
-            if focus:
-                focused = (focus / path_str).resolve()
-                if focused.exists():
-                    return focused
-        return resolved
+        if resolved.exists():
+            return resolved
+
+        # Fallback: try focus directly (when base != focus).
+        focus = _read_focus(config)
+        if focus and focus != base:
+            focused = (focus / path_str).resolve()
+            if focused.exists():
+                return focused
+
+        # Nothing found — return docs_root-based path for the error message.
+        return docs_root_resolved
     return p.resolve()
 
 
