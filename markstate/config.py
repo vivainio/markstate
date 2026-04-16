@@ -1,8 +1,8 @@
 """Load and validate flow.yml, walking up from cwd to find it."""
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-import re
 
 import yaml
 

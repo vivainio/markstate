@@ -6,7 +6,6 @@ from pathlib import Path
 
 import yaml
 
-
 _TASK_RE = re.compile(r'^(\s*-\s+\[)([ xX])(\]\s+)(.*)', re.MULTILINE)
 _COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
 

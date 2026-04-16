@@ -1,26 +1,27 @@
 """markstate — markdown document status tracking."""
 
 from markstate.config import (
+    Condition,
     FlowConfig,
     Phase,
-    Transition,
-    Condition,
-    ProducedDoc,
     ProducedDir,
+    ProducedDoc,
+    Transition,
     find_and_load,
 )
 from markstate.engine import (
-    TransitionError,
     TaskNotFoundError,
-    current_phase,
+    TransitionError,
     check_gate,
+    check_task,
+    current_phase,
     do_transition,
+    next_task,
     next_transitions,
     status,
-    next_task,
-    check_task,
 )
-from markstate.frontmatter import Document, load as load_document
+from markstate.frontmatter import Document
+from markstate.frontmatter import load as load_document
 
 __all__ = [
     # config

@@ -1,11 +1,18 @@
 """State engine: evaluate conditions and execute transitions."""
 
 import subprocess
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from markstate import frontmatter
-from markstate.config import Condition, FlowConfig, Phase, ProducedDir, ProducedDoc, Transition, filtered_rglob
+from markstate.config import (
+    Condition,
+    FlowConfig,
+    Phase,
+    ProducedDir,
+    ProducedDoc,
+    filtered_rglob,
+)
 
 
 class TransitionError(Exception):
@@ -29,7 +36,7 @@ def resolve_magic(value: str) -> str | date | datetime:
         except subprocess.CalledProcessError:
             return value
     if value == "now":
-        return datetime.now(timezone.utc).replace(microsecond=0)
+        return datetime.now(UTC).replace(microsecond=0)
     if value == "today":
         return date.today()
     return value

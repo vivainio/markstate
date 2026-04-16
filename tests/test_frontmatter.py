@@ -1,7 +1,5 @@
 """Tests for frontmatter parsing and checkbox utilities."""
 
-import pytest
-from pathlib import Path
 
 from markstate.frontmatter import (
     _parse,
@@ -11,7 +9,6 @@ from markstate.frontmatter import (
     load,
     next_unchecked_task,
 )
-
 
 # --- parsing / serializing ---
 

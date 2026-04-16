@@ -1,8 +1,10 @@
 """CLI integration tests."""
 
 import json
+import re
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -117,7 +119,7 @@ def test_status_shows_docs_root_when_redirect(tmp_path):
     source_repo.mkdir()
 
     (docs_repo / "flow.yml").write_text(SIMPLE_FLOW)
-    (source_repo / "flow.yml").write_text(f"redirect: ../docs-repo/flow.yml\n")
+    (source_repo / "flow.yml").write_text("redirect: ../docs-repo/flow.yml\n")
 
     result = run(["status"], source_repo)
     assert result.returncode == 0
@@ -378,10 +380,9 @@ def test_do_unblock_clears_blocked_fields(tmp_path):
 
     assert run(["do", "unblock", "spec.md"], tmp_path).returncode == 0
     text = (tmp_path / "spec.md").read_text()
-    import re as _re
-    assert _re.search(r"^blocked-at:", text, _re.MULTILINE) is None
-    assert _re.search(r"^blocked-reason:", text, _re.MULTILINE) is None
-    assert _re.search(r"^unblocked-at:", text, _re.MULTILINE) is not None
+    assert re.search(r"^blocked-at:", text, re.MULTILINE) is None
+    assert re.search(r"^blocked-reason:", text, re.MULTILINE) is None
+    assert re.search(r"^unblocked-at:", text, re.MULTILINE) is not None
 
 
 def test_cli_unset_flag_removes_field(tmp_path):
@@ -463,10 +464,8 @@ def test_init_errors_on_invalid_yaml(tmp_path):
 
 def test_query_relative_dates(tmp_path):
     """Right-hand side of query predicates expands Nd/Nw/Nm/Ny relative dates."""
-    from datetime import datetime, timedelta, timezone
-
     setup_flow(tmp_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     far_past = (now - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
     recent = (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -488,14 +487,12 @@ def test_query_relative_dates(tmp_path):
 
 def test_query_me_value(tmp_path):
     """Query value `me` expands to the git user name."""
-    import subprocess as _sp
-
     setup_flow(tmp_path)
     try:
-        me = _sp.run(
+        me = subprocess.run(
             ["git", "config", "user.name"], capture_output=True, text=True, check=True
         ).stdout.strip()
-    except _sp.CalledProcessError:
+    except subprocess.CalledProcessError:
         return  # no git user configured; skip silently
     if not me:
         return
@@ -510,20 +507,18 @@ def test_query_me_value(tmp_path):
 
 
 def test_do_applies_transition_set_and_once_is_stable(tmp_path):
-    import re as _re
-
     setup_flow(tmp_path, SET_FLOW)
     assert run(["new", "spec.md"], tmp_path).returncode == 0
     assert run(["do", "accept", "spec.md"], tmp_path).returncode == 0
     first_text = (tmp_path / "spec.md").read_text()
-    m = _re.search(r"^first-accepted-at:\s*(\S+)", first_text, _re.MULTILINE)
+    m = re.search(r"^first-accepted-at:\s*(\S+)", first_text, re.MULTILINE)
     assert m, first_text
     first_ts = m.group(1)
 
     assert run(["do", "reopen", "spec.md"], tmp_path).returncode == 0
     assert run(["do", "accept", "spec.md"], tmp_path).returncode == 0
     second_text = (tmp_path / "spec.md").read_text()
-    m2 = _re.search(r"^first-accepted-at:\s*(\S+)", second_text, _re.MULTILINE)
+    m2 = re.search(r"^first-accepted-at:\s*(\S+)", second_text, re.MULTILINE)
     assert m2
     assert m2.group(1) == first_ts, "once- field should not be overwritten on re-accept"
     # accepted-at (non-once) must update on every accept

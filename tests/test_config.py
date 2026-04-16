@@ -1,10 +1,10 @@
 """Tests for flow.yml loading and parsing."""
 
-import pytest
 from pathlib import Path
 
-import markstate.config as config_module
-from markstate.config import find_and_load
+import pytest
+
+from markstate.config import ProducedDir, find_and_load
 
 
 def write_flow(tmp_path: Path, content: str) -> Path:
@@ -68,7 +68,7 @@ def test_redirect_loads_target(tmp_path):
         "docs_root: changes\nphases: []\ntransitions: []\n"
     )
     (source_repo / "flow.yml").write_text(
-        f"redirect: ../docs-repo/flow.yml\n"
+        "redirect: ../docs-repo/flow.yml\n"
     )
 
     cfg = find_and_load(source_repo)
@@ -344,7 +344,6 @@ phases:
           - file: technical-spec.md
 transitions: []
 """)
-    from markstate.config import ProducedDir
     cfg = find_and_load(tmp_path)
     entry = cfg.phases[0].produces[0]
     assert isinstance(entry, ProducedDir)

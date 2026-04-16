@@ -1,17 +1,20 @@
 """Tests for the state engine."""
 
-import pytest
+import re
+from datetime import date, datetime
 from pathlib import Path
 
+import pytest
+
+from markstate import engine, frontmatter
 from markstate.config import (
     Condition,
     FlowConfig,
-    Transition,
     Phase,
     ProducedDir,
     ProducedDoc,
+    Transition,
 )
-from markstate import engine
 
 
 def make_config(tmp_path, phases, transitions=None, docs_root=None):
@@ -147,7 +150,6 @@ def test_do_move_success(tmp_path):
     old, new = engine.do_transition("approve", tmp_path / "spec.md", cfg)
     assert old == "draft"
     assert new == "approved"
-    from markstate import frontmatter
     assert frontmatter.load(tmp_path / "spec.md").get("status") == "approved"
 
 
@@ -363,16 +365,12 @@ def test_resolve_magic_passthrough():
 
 
 def test_resolve_magic_now_is_datetime():
-    from datetime import datetime
-
     out = engine.resolve_magic("now")
     assert isinstance(out, datetime), f"expected datetime, got {type(out)}: {out}"
     assert out.microsecond == 0
 
 
 def test_resolve_magic_today_is_date():
-    from datetime import date
-
     out = engine.resolve_magic("today")
     assert isinstance(out, date), f"expected date, got {type(out)}: {out}"
 
@@ -409,14 +407,12 @@ def test_apply_fields_once_prefix_writes_first_time_only(tmp_path):
 
 
 def test_apply_fields_expands_today(tmp_path):
-    import re as _re
-
     p = tmp_path / "x.md"
     write_md(p, status="draft")
     doc = engine.frontmatter.load(p)
     engine.apply_fields(doc, {"stamp": "today"})
     doc.save()
-    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(engine.frontmatter.load(p).get("stamp")))
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(engine.frontmatter.load(p).get("stamp")))
 
 
 # --- do_transition with set_fields ---

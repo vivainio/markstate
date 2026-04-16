@@ -3,19 +3,28 @@
 import argparse
 import difflib
 import json
+import os
 import re
 import sys
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import version
+from importlib.resources import files as pkg_files
 from pathlib import Path
 
 import yaml
 
 from markstate import engine, frontmatter
-from markstate.config import FlowConfig, Phase, ProducedDir, ProducedDoc, filtered_rglob, find_and_load, find_flow_target
+from markstate.config import (
+    FlowConfig,
+    Phase,
+    ProducedDir,
+    ProducedDoc,
+    filtered_rglob,
+    find_and_load,
+    find_flow_target,
+)
 from markstate.engine import TaskNotFoundError, TransitionError
-
 
 FOCUS_FILE = ".markstate-focus"
 FOCUS_ENV_VAR = "MARKSTATE_FOCUS"
@@ -699,16 +708,16 @@ def _resolve_query_value(value: str) -> str:
     midnight UTC on the threshold day.
     """
     if value == "now":
-        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if value == "today":
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime("%Y-%m-%d")
     if value == "me":
         return engine.resolve_magic("me")
     m = _REL_AGO_RE.match(value)
     if m:
         n = int(m.group(1))
         days = {"d": n, "w": 7 * n, "m": 30 * n, "y": 365 * n}[m.group(2)]
-        return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+        return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
     return value
 
 
@@ -785,8 +794,6 @@ def _cmd_query(args: argparse.Namespace) -> None:
 
 
 def _cmd_install_skills(args: argparse.Namespace) -> None:
-    from importlib.resources import files as pkg_files
-
     target_root = Path.home() / ".claude" / "skills"
     source_root = pkg_files("markstate").joinpath("skills")
     for skill_dir in source_root.iterdir():
@@ -937,7 +944,6 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    import os
     global _focus_override
     config = _try_load_config()
     parser = _build_parser(config)
