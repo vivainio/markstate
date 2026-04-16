@@ -216,20 +216,27 @@ def _all_pass(conditions: list[Condition], config: FlowConfig, directory: Path) 
     return all(_evaluate(c, config, directory) for c in conditions)
 
 
+def _status_matches(actual: str, expected: str | list[str]) -> bool:
+    """Check if actual status matches expected (single string or list of strings)."""
+    if isinstance(expected, list):
+        return actual in expected
+    return actual == expected
+
+
 def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool:
     if condition.file is not None and condition.status is not None:
         path = directory / condition.file
         if not path.exists():
             return False
         doc = frontmatter.load(path)
-        return str(doc.get(config.status_field) or "") == condition.status
+        return _status_matches(str(doc.get(config.status_field) or ""), condition.status)
 
     if condition.glob is not None and condition.all_status is not None:
         paths = list(directory.glob(condition.glob))
         if not paths:
             return False
         return all(
-            str(frontmatter.load(p).get(config.status_field) or "") == condition.all_status
+            _status_matches(str(frontmatter.load(p).get(config.status_field) or ""), condition.all_status)
             for p in paths
         )
 
@@ -287,11 +294,17 @@ def check_task(substring: str, config: FlowConfig, directory: Path) -> dict:
     raise TaskNotFoundError(f"no unchecked task matching '{substring}'")
 
 
+def _describe_status(status: str | list[str]) -> str:
+    if isinstance(status, list):
+        return " or ".join(f"'{s}'" for s in status)
+    return f"'{status}'"
+
+
 def describe_condition(condition: Condition) -> str:
     if condition.file and condition.status:
-        return f"{condition.file} must have status '{condition.status}'"
+        return f"{condition.file} must have status {_describe_status(condition.status)}"
     if condition.glob and condition.all_status:
-        return f"all files matching '{condition.glob}' must have status '{condition.all_status}'"
+        return f"all files matching '{condition.glob}' must have status {_describe_status(condition.all_status)}"
     if condition.file and condition.tasks:
         return f"all tasks in {condition.file} must be done"
     if condition.glob and condition.tasks:

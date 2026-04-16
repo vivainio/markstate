@@ -29,8 +29,8 @@ class Transition:
 class Condition:
     file: str | None = None
     glob: str | None = None
-    status: str | None = None
-    all_status: str | None = None
+    status: str | list[str] | None = None
+    all_status: str | list[str] | None = None
     tasks: str | None = None  # "all_done"
 
 

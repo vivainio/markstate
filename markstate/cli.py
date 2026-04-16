@@ -83,14 +83,25 @@ def _read_focus(config: FlowConfig) -> Path | None:
 
 def _resolve_file(path_str: str, config: FlowConfig | None) -> Path:
     """Resolve a file path: absolute paths used as-is, relative paths resolved
-    against doc base (focus > cwd-if-inside-docs_root) when config is available,
-    otherwise against cwd."""
+    against doc base when config is available, otherwise against cwd.
+
+    When the base-resolved path does not exist, falls back to focus if set —
+    so ``markstate do accept plan.md`` from docs_root finds the file in the
+    focused directory instead of failing.
+    """
     p = Path(path_str)
     if p.is_absolute():
         return p
     if config:
         base = _resolve_doc_base(config)
-        return (base / path_str).resolve()
+        resolved = (base / path_str).resolve()
+        if not resolved.exists():
+            focus = _read_focus(config)
+            if focus:
+                focused = (focus / path_str).resolve()
+                if focused.exists():
+                    return focused
+        return resolved
     return p.resolve()
 
 
@@ -464,6 +475,9 @@ def _cmd_do(args: argparse.Namespace) -> None:
     config = _load_config()
     directory = _resolve_doc_base(config)
     target = _resolve_file(args.target, config)
+    if not target.exists():
+        print(f"error: '{args.target}' not found (resolved to {target})", file=sys.stderr)
+        sys.exit(1)
     # Evaluate phase relative to the document's parent directory context.
     # For files inside a focused change dir, use focus; otherwise use directory.
     phase_dir = _read_focus(config) or directory
