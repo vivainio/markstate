@@ -1,6 +1,7 @@
 """CLI entry point for markstate."""
 
 import argparse
+import difflib
 import json
 import re
 import sys
@@ -8,6 +9,8 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from importlib.metadata import version
 from pathlib import Path
+
+import yaml
 
 from markstate import engine, frontmatter
 from markstate.config import FlowConfig, Phase, ProducedDir, ProducedDoc, filtered_rglob, find_and_load, find_flow_target
@@ -210,37 +213,77 @@ transitions:
 """
 
 
-def _cmd_init(args: argparse.Namespace) -> None:
-    target = Path(".markstate/flow.yml") if args.hidden else Path("flow.yml")
-    if target.exists() and not args.force:
-        print(f"error: '{target}' already exists. Use --force to overwrite.", file=sys.stderr)
+def _load_source_content(source_arg: str | None) -> str:
+    """Resolve a source argument (file path, URL, or None) to flow.yml content."""
+    if source_arg is None:
+        return TEMPLATE_FLOW
+    if source_arg.startswith(("http://", "https://")):
+        try:
+            with urllib.request.urlopen(source_arg) as resp:
+                return resp.read().decode()
+        except Exception as e:
+            print(f"error: could not fetch '{source_arg}': {e}", file=sys.stderr)
+            sys.exit(1)
+    source = Path(source_arg).expanduser()
+    if not source.is_file():
+        print(f"error: '{source_arg}' not found", file=sys.stderr)
         sys.exit(1)
+    return source.read_text(encoding="utf-8")
+
+
+def _diff_counts(old: str, new: str) -> tuple[int, int]:
+    """Return (added, removed) line counts between two strings."""
+    added = removed = 0
+    for line in difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm=""):
+        if line.startswith("+") and not line.startswith("+++"):
+            added += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    return added, removed
+
+
+def _cmd_init(args: argparse.Namespace) -> None:
+    # If a flow.yml is already reachable from cwd, replace it (idempotent upgrade).
+    try:
+        existing = find_flow_target()
+    except (FileNotFoundError, ValueError):
+        existing = None
+
+    content = _load_source_content(args.source)
+    if args.source is not None:
+        try:
+            yaml.safe_load(content)
+        except yaml.YAMLError as e:
+            print(f"error: source does not parse as YAML: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    if existing is not None:
+        if args.hidden:
+            print(
+                f"error: flow.yml already exists at {existing}; --hidden can't convert in place",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        old_content = existing.read_text(encoding="utf-8")
+        if old_content == content:
+            print(f"{existing} is already up to date")
+            return
+        added, removed = _diff_counts(old_content, content)
+        existing.write_text(content, encoding="utf-8")
+        print(f"upgraded {existing}  (+{added} -{removed})")
+        return
+
+    target = Path(".markstate/flow.yml") if args.hidden else Path("flow.yml")
     target.parent.mkdir(parents=True, exist_ok=True)
-    if args.source:
-        if args.source.startswith(("http://", "https://")):
-            try:
-                with urllib.request.urlopen(args.source) as resp:
-                    content = resp.read().decode()
-            except Exception as e:
-                print(f"error: could not fetch '{args.source}': {e}", file=sys.stderr)
-                sys.exit(1)
-        else:
-            source = Path(args.source)
-            if not source.exists():
-                print(f"error: '{args.source}' not found", file=sys.stderr)
-                sys.exit(1)
-            content = source.read_text(encoding="utf-8")
-        target.write_text(content, encoding="utf-8")
-    else:
-        target.write_text(TEMPLATE_FLOW, encoding="utf-8")
+    target.write_text(content, encoding="utf-8")
     print(f"created {target}")
     if args.hidden:
         gitignore = Path(".gitignore")
         entry = ".markstate/\n"
         if gitignore.exists():
-            existing = gitignore.read_text(encoding="utf-8")
-            if ".markstate/" not in existing:
-                gitignore.write_text(existing.rstrip("\n") + "\n" + entry, encoding="utf-8")
+            existing_gi = gitignore.read_text(encoding="utf-8")
+            if ".markstate/" not in existing_gi:
+                gitignore.write_text(existing_gi.rstrip("\n") + "\n" + entry, encoding="utf-8")
                 print("updated .gitignore")
         else:
             gitignore.write_text(entry, encoding="utf-8")
@@ -727,65 +770,6 @@ def _cmd_query(args: argparse.Namespace) -> None:
         print(f"  {rel:40s}  {fm_parts}")
 
 
-def _cmd_upgrade(args: argparse.Namespace) -> None:
-    import yaml
-
-    source = Path(args.source).expanduser().resolve()
-    if not source.is_file():
-        print(f"error: source '{args.source}' does not exist", file=sys.stderr)
-        sys.exit(1)
-
-    source_text = source.read_text(encoding="utf-8")
-    try:
-        yaml.safe_load(source_text)
-    except yaml.YAMLError as e:
-        print(f"error: source does not parse as YAML: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        target = find_flow_target()
-    except FileNotFoundError:
-        print(
-            "error: no flow.yml found in cwd or any parent. Run `markstate init <flow.yml>` first.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    if target.resolve() == source:
-        print(f"source and target are the same file ({target}); nothing to do")
-        return
-
-    old_lines = target.read_text(encoding="utf-8").splitlines()
-    new_lines = source_text.splitlines()
-    if old_lines == new_lines:
-        print(f"{target} is already up to date")
-        return
-
-    # Rough diff summary — count line-level add/remove via difflib
-    import difflib
-    added = 0
-    removed = 0
-    for line in difflib.unified_diff(old_lines, new_lines, lineterm=""):
-        if line.startswith("+") and not line.startswith("+++"):
-            added += 1
-        elif line.startswith("-") and not line.startswith("---"):
-            removed += 1
-
-    if args.dry_run:
-        print(f"would upgrade {target}")
-        print(f"  source: {source}")
-        print(f"  changes: +{added} -{removed}")
-        return
-
-    target.write_text(source_text, encoding="utf-8")
-    print(f"upgraded {target}")
-    print(f"  source: {source}")
-    print(f"  changes: +{added} -{removed}")
-
-
 def _cmd_install_skills(args: argparse.Namespace) -> None:
     from importlib.resources import files as pkg_files
 
@@ -861,10 +845,9 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     # init
     p = sub.add_parser("init", help="Create a flow.yml in the current directory.")
     p.add_argument("source", nargs="?", default=None, metavar="SOURCE",
-                   help="Copy from an existing flow.yml instead of writing the built-in template.")
+                   help="Copy from an existing flow.yml (file or URL) instead of writing the built-in template.")
     p.add_argument("--hidden", action="store_true",
-                   help="Write to .markstate/flow.yml instead of flow.yml.")
-    p.add_argument("--force", action="store_true", help="Overwrite existing file")
+                   help="Write to .markstate/flow.yml instead of flow.yml. Only applies when no flow.yml exists upward from cwd.")
 
     # new
     p = sub.add_parser("new", help="Create a document from its template defined in flow.yml.")
@@ -921,14 +904,6 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     # install-skills
     sub.add_parser("install-skills", help="Install markstate Claude skill to ~/.claude/skills/.")
 
-    # upgrade
-    p = sub.add_parser(
-        "upgrade",
-        help="Replace the current flow.yml (following redirects) with contents of SOURCE.",
-    )
-    p.add_argument("source", metavar="SOURCE", help="Path to a new flow.yml to install.")
-    p.add_argument("--dry-run", action="store_true", help="Show what would change without writing.")
-
     # query
     p = sub.add_parser(
         "query",
@@ -977,6 +952,5 @@ def main() -> None:
         "check": _cmd_check,
         "query": _cmd_query,
         "install-skills": _cmd_install_skills,
-        "upgrade": _cmd_upgrade,
     }
     dispatch[args.command](args)

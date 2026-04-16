@@ -47,14 +47,16 @@ markstate status
 
 ### `init`
 
-Create a `flow.yml` in the current directory:
+Install or upgrade a `flow.yml`. Idempotent: if a `flow.yml` is already reachable from the current directory (walking up and following `redirect:`), `init` replaces it. Otherwise, creates a new one at cwd.
 
 ```
-markstate init                                    # write built-in template
-markstate init examples/sdd/flow.yml              # copy from an existing flow.yml
-markstate init examples/sdd/flow.yml --hidden     # copy into .markstate/ (see below)
-markstate init --force                            # overwrite existing
+markstate init                                    # write built-in template (fresh only)
+markstate init examples/sdd/flow.yml              # install or upgrade from a source file
+markstate init https://…/flow.yml                 # install or upgrade from a URL
+markstate init examples/sdd/flow.yml --hidden     # fresh install into .markstate/ (see below)
 ```
+
+`--hidden` only applies to fresh installs; running `init --hidden` when a visible `flow.yml` already exists errors out.
 
 ### `new`
 
@@ -298,19 +300,6 @@ $ markstate check-gate review
 gate not satisfied:
   - spec.md must have status 'approved'
 ```
-
-### `upgrade`
-
-Replace the project's `flow.yml` with a newer version (e.g. from an updated skill's bundled resources). Walks up from cwd to find the current `flow.yml`, follows any `redirect:` chain to the final real file, then overwrites it:
-
-```
-markstate upgrade ~/.claude/skills/universal/bu-sdd/resources/flow.yml
-# upgraded /path/to/project/flow.yml
-#   source: /home/me/.claude/skills/universal/bu-sdd/resources/flow.yml
-#   changes: +12 -3
-```
-
-Use `--dry-run` to see the line add/remove count without writing. Errors out if the source doesn't parse as YAML, or if no `flow.yml` is found to upgrade.
 
 ## Trying it without visible marks
 
