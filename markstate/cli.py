@@ -595,7 +595,7 @@ def _cmd_status(args: argparse.Namespace) -> None:
             short = short_names[rel]
             print(f"    {short:{name_width}s}  {s:>{status_width}s}{task_info}")
 
-    if config:
+    if config and result["phases"]:
         print()
         phase_width = max(len(p["name"]) for p in result["phases"])
         for p in result["phases"]:
