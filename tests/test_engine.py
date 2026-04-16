@@ -362,18 +362,19 @@ def test_resolve_magic_passthrough():
     assert engine.resolve_magic("literal") == "literal"
 
 
-def test_resolve_magic_now_is_iso_utc():
-    import re as _re
+def test_resolve_magic_now_is_datetime():
+    from datetime import datetime
 
     out = engine.resolve_magic("now")
-    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", out), out
+    assert isinstance(out, datetime), f"expected datetime, got {type(out)}: {out}"
+    assert out.microsecond == 0
 
 
-def test_resolve_magic_today_is_iso_date():
-    import re as _re
+def test_resolve_magic_today_is_date():
+    from datetime import date
 
     out = engine.resolve_magic("today")
-    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}", out), out
+    assert isinstance(out, date), f"expected date, got {type(out)}: {out}"
 
 
 # --- apply_fields ---

@@ -1,7 +1,7 @@
 """State engine: evaluate conditions and execute transitions."""
 
 import subprocess
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from markstate import frontmatter
@@ -19,7 +19,7 @@ class TaskNotFoundError(Exception):
 _ONCE_PREFIX = "once-"
 
 
-def resolve_magic(value: str) -> str:
+def resolve_magic(value: str) -> str | date | datetime:
     """Expand magic field values: 'me', 'now', 'today'. Other values pass through."""
     if value == "me":
         try:
@@ -29,9 +29,9 @@ def resolve_magic(value: str) -> str:
         except subprocess.CalledProcessError:
             return value
     if value == "now":
-        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return datetime.now(timezone.utc).replace(microsecond=0)
     if value == "today":
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return date.today()
     return value
 
 
