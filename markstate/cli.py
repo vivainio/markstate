@@ -653,6 +653,87 @@ def _cmd_status(args: argparse.Namespace) -> None:
             print(f"  {p['name']:{phase_width}s}  {state}")
 
 
+_STATUS_EMOJI = {
+    "draft": "📝",
+    "proposed": "💭",
+    "approved": "✅",
+    "accepted": "✅",
+    "in-progress": "🚧",
+    "in-review": "👀",
+    "reviewed": "✔️ ",
+    "blocked": "🚫",
+    "done": "🎉",
+    "complete": "🎉",
+    "archived": "📦",
+    "rejected": "❌",
+    "wip": "🚧",
+}
+
+
+def _progress_bar(frac: float, width: int = 10) -> str:
+    frac = max(0.0, min(1.0, frac))
+    filled = int(round(frac * width))
+    return "[" + "█" * filled + "░" * (width - filled) + "]"
+
+
+def _cmd_viz(args: argparse.Namespace) -> None:
+    config = _try_load_config()
+    directory = _resolve_directory(args, config)
+    status_field = config.status_field if config else "status"
+
+    exclude = config.exclude_dirs if config else None
+    groups: dict[str, list[tuple[Path, str | None, int, int]]] = {}
+    for path in filtered_rglob(directory, "*.md", exclude):
+        doc = frontmatter.load(path)
+        s = doc.get(status_field)
+        done, total = frontmatter.count_tasks(doc.body)
+        if not s and total == 0:
+            continue
+        rel = path.relative_to(directory)
+        parent = str(rel.parent) if str(rel.parent) != "." else ""
+        groups.setdefault(parent, []).append((rel, str(s) if s else None, done, total))
+
+    if not groups:
+        print("no files with status or tasks")
+        return
+
+    if config:
+        phase = engine.current_phase(config, directory)
+        phase_names = [p.name for p in config.phases_for(directory)]
+        if phase_names:
+            cur = phase.name if phase else None
+            marks = []
+            passed = True
+            for n in phase_names:
+                if n == cur:
+                    marks.append(f"▶ {n}")
+                    passed = False
+                elif passed:
+                    marks.append(f"✓ {n}")
+                else:
+                    marks.append(f"  {n}")
+            if cur is None:
+                marks = [f"✓ {n}" for n in phase_names]
+            print("  " + "  →  ".join(marks))
+            print()
+
+    for parent in sorted(groups):
+        if parent:
+            print(f"  {parent}/")
+        rows = sorted(groups[parent], key=lambda r: (r[3] > 0, r[0].name))
+        name_w = max(len(p.name) for p, _, _, _ in rows)
+        status_w = max((len(s or "") for _, s, _, _ in rows), default=0)
+        for rel, s, done, total in rows:
+            emoji = _STATUS_EMOJI.get(s, "• ") if s else "  "
+            status_str = s or ""
+            if total > 0:
+                tail = f"  {_progress_bar(done / total)}  {done}/{total} tasks"
+            else:
+                tail = ""
+            print(f"    {emoji} {rel.name:{name_w}s}  {status_str:{status_w}s}{tail}")
+        print()
+
+
 def _cmd_check_gate(args: argparse.Namespace) -> None:
     config = _load_config()
     phase = config.phase(args.phase_name)
@@ -921,6 +1002,10 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
     p.add_argument("directory", nargs="?", default=None)
 
+    # viz
+    p = sub.add_parser("viz", help="Visualize status and progress with emoji and bars.")
+    p.add_argument("directory", nargs="?", default=None)
+
     # check-gate
     p = sub.add_parser("check-gate", help="Check if gate conditions for a phase are met.")
     p.add_argument("phase_name", metavar="PHASE")
@@ -987,6 +1072,7 @@ def main() -> None:
         "new": _cmd_new,
         "do": _cmd_do,
         "status": _cmd_status,
+        "viz": _cmd_viz,
         "check-gate": _cmd_check_gate,
         "transitions": _cmd_transitions,
         "next": _cmd_next,
