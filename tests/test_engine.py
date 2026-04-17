@@ -463,6 +463,51 @@ def test_do_transition_unset_clears_fields(tmp_path):
     assert after.get("unblocked-at") is not None
 
 
+def test_do_transition_require_set_rejects_when_missing(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[
+            Transition(
+                "block", "draft", "blocked",
+                set_fields={"blocked-at": "now"},
+                require_set=["blocked-reason"],
+            ),
+        ],
+    )
+    spec = tmp_path / "spec.md"
+    write_md(spec, status="draft")
+    with pytest.raises(engine.TransitionError, match="requires --set blocked-reason"):
+        engine.do_transition("block", spec, cfg)
+    # Status must not have changed on the failing call
+    assert engine.frontmatter.load(spec).get("status") == "draft"
+
+
+def test_do_transition_require_set_passes_when_provided(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[
+            Transition(
+                "block", "draft", "blocked",
+                set_fields={"blocked-at": "now"},
+                require_set=["blocked-reason"],
+            ),
+        ],
+    )
+    spec = tmp_path / "spec.md"
+    write_md(spec, status="draft")
+    engine.do_transition("block", spec, cfg, provided_keys={"blocked-reason"})
+    assert engine.frontmatter.load(spec).get("status") == "blocked"
+
+
+def test_check_require_set_reports_all_missing():
+    t = Transition("skip", "draft", "skipped", require_set=["a", "b", "c"])
+    assert engine.check_require_set(t, {"b"}) == ["a", "c"]
+    assert engine.check_require_set(t, {"a", "b", "c"}) == []
+    assert engine.check_require_set(t, set()) == ["a", "b", "c"]
+
+
 def test_do_transition_unset_missing_key_is_silent(tmp_path):
     cfg = make_config(
         tmp_path,

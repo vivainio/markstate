@@ -11,6 +11,7 @@ from markstate.config import (
     Phase,
     ProducedDir,
     ProducedDoc,
+    Transition,
     filtered_rglob,
 )
 
@@ -80,12 +81,39 @@ def check_gate(phase: Phase, config: FlowConfig, directory: Path) -> list[str]:
     return [describe_condition(c) for c in phase.gates if not _evaluate(c, config, directory)]
 
 
-def do_transition(transition_name: str, target: Path, config: FlowConfig) -> tuple[str, str]:
-    """Execute a named transition on target file. Returns (old_status, new_status)."""
+def check_require_set(transition: Transition, provided_keys: set[str]) -> list[str]:
+    """Return keys required by the transition that are not in provided_keys.
+
+    Required keys must be supplied by the caller at transition time (e.g. via
+    CLI --set). Flow-level set: defaults do not satisfy the requirement —
+    otherwise a flow author could defeat the check by hardcoding a placeholder.
+    """
+    return [k for k in transition.require_set if k not in provided_keys]
+
+
+def do_transition(
+    transition_name: str,
+    target: Path,
+    config: FlowConfig,
+    provided_keys: set[str] | None = None,
+) -> tuple[str, str]:
+    """Execute a named transition on target file. Returns (old_status, new_status).
+
+    provided_keys is the set of frontmatter keys the caller is supplying
+    alongside the transition (typically from CLI --set). It is used to
+    validate the transition's require_set list.
+    """
     t = config.transition(transition_name)
     if t is None:
         raise TransitionError(
             f"unknown transition '{transition_name}'. Available: {config.transition_names()}"
+        )
+
+    missing = check_require_set(t, provided_keys or set())
+    if missing:
+        flags = " ".join(f"--set {k}=<value>" for k in missing)
+        raise TransitionError(
+            f"transition '{transition_name}' requires {flags}"
         )
 
     doc = frontmatter.load(target)

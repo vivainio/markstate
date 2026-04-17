@@ -512,14 +512,17 @@ def _cmd_do(args: argparse.Namespace) -> None:
 
     phase_before = engine.current_phase(config, phase_dir)
 
+    cli_set = _parse_set_args(args.set)
     try:
-        old, new = engine.do_transition(args.transition_name, target, config)
+        old, new = engine.do_transition(
+            args.transition_name, target, config, provided_keys=set(cli_set.keys())
+        )
         print(f"{args.target}: {old} → {new}")
     except TransitionError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    _apply_frontmatter_edits(target, _parse_set_args(args.set), list(args.unset), config.status_field)
+    _apply_frontmatter_edits(target, cli_set, list(args.unset), config.status_field)
 
     phase_after = engine.current_phase(config, phase_dir)
     _report_transition(phase_before, phase_after, config, phase_dir)

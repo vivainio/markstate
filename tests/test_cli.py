@@ -380,6 +380,54 @@ transitions:
 """
 
 
+REQUIRE_SET_FLOW = """\
+phases:
+  - name: drafting
+    produces:
+      - file: spec.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Spec
+
+transitions:
+  - name: block
+    from: draft
+    to: blocked
+    set:
+      blocked-at: now
+    require_set:
+      - blocked-reason
+"""
+
+
+def test_do_rejects_transition_missing_required_set(tmp_path):
+    setup_flow(tmp_path, REQUIRE_SET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    result = run(["do", "block", "spec.md"], tmp_path)
+    assert result.returncode != 0
+    assert "requires --set blocked-reason" in result.stderr
+    # Status must remain draft — no partial transition
+    text = (tmp_path / "spec.md").read_text()
+    assert "status: draft" in text
+    assert "blocked-at" not in text
+
+
+def test_do_accepts_transition_with_required_set(tmp_path):
+    setup_flow(tmp_path, REQUIRE_SET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    result = run(
+        ["do", "block", "spec.md", "--set", "blocked-reason=waiting on infra"],
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    text = (tmp_path / "spec.md").read_text()
+    assert "status: blocked" in text
+    assert "blocked-reason: waiting on infra" in text
+
+
 def test_do_unblock_clears_blocked_fields(tmp_path):
     setup_flow(tmp_path, UNSET_FLOW)
     assert run(["new", "spec.md"], tmp_path).returncode == 0

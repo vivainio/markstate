@@ -282,6 +282,36 @@ transitions:
     assert t.unset_fields == ["blocked-at", "blocked-reason"]
 
 
+def test_parse_transition_require_set(tmp_path):
+    write_flow(tmp_path, """
+phases: []
+transitions:
+  - name: block
+    from: draft
+    to: blocked
+    set:
+      blocked-at: now
+    require_set:
+      - blocked-reason
+""")
+    cfg = find_and_load(tmp_path)
+    t = cfg.transition("block")
+    assert t.require_set == ["blocked-reason"]
+
+
+def test_parse_transition_require_set_defaults_empty(tmp_path):
+    write_flow(tmp_path, """
+phases: []
+transitions:
+  - name: accept
+    from: draft
+    to: accepted
+""")
+    cfg = find_and_load(tmp_path)
+    t = cfg.transition("accept")
+    assert t.require_set == []
+
+
 def test_parse_produced_doc_unset_fields(tmp_path):
     write_flow(tmp_path, """
 phases:
