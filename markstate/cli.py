@@ -955,23 +955,41 @@ def _cmd_query(args: argparse.Namespace) -> None:
 def _cmd_list(args: argparse.Namespace) -> None:
     config = _load_config()
     root = config.docs_root
-    dirs: set[Path] = set()
+    info: dict[tuple[str, ...], tuple[int, str]] = {}
     for md in filtered_rglob(root, "*.md", config.exclude_dirs):
-        if md.is_file():
-            dirs.add(md.parent)
-    if not dirs:
+        if not md.is_file():
+            continue
+        d = md.parent
+        key = tuple(d.relative_to(root).parts)
+        if key not in info:
+            count = sum(1 for p in d.iterdir() if p.is_file() and p.suffix == ".md")
+            phase = engine.current_phase(config, d)
+            info[key] = (count, phase.name if phase else "")
+    if not info:
         print("(no directories with documents)")
         return
-    rows = []
-    for d in sorted(dirs):
-        rel = d.relative_to(root).as_posix() or "."
-        count = sum(1 for p in d.iterdir() if p.is_file() and p.suffix == ".md")
-        phase = engine.current_phase(config, d)
-        rows.append((rel, count, phase.name if phase else ""))
-    rel_w = max(len(r[0]) for r in rows)
-    for rel, count, phase in rows:
-        suffix = f"  [{phase}]" if phase else ""
-        print(f"  {rel:{rel_w}s}  {count} doc{'s' if count != 1 else ''}{suffix}")
+
+    # Build set of all ancestor keys so interior nodes appear as headers.
+    all_keys: set[tuple[str, ...]] = set()
+    for key in info:
+        for i in range(1, len(key) + 1):
+            all_keys.add(key[:i])
+
+    # Compute label column width for alignment.
+    max_label = max(len(k[-1]) + 2 * (len(k) - 1) for k in all_keys) if all_keys else 0
+
+    for key in sorted(all_keys):
+        depth = len(key) - 1
+        name = key[-1]
+        indent = "  " * depth
+        label = f"{indent}{name}"
+        if key in info:
+            count, phase = info[key]
+            pad = " " * max(1, max_label - len(label) + 2)
+            suffix = f"  [{phase}]" if phase else ""
+            print(f"{label}{pad}{count} doc{'s' if count != 1 else ''}{suffix}")
+        else:
+            print(label)
 
 
 def _cmd_audit(args: argparse.Namespace) -> None:
