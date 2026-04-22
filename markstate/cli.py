@@ -952,6 +952,28 @@ def _cmd_query(args: argparse.Namespace) -> None:
         print(f"  {rel:40s}  {fm_parts}")
 
 
+def _cmd_list(args: argparse.Namespace) -> None:
+    config = _load_config()
+    root = config.docs_root
+    dirs: set[Path] = set()
+    for md in filtered_rglob(root, "*.md", config.exclude_dirs):
+        if md.is_file():
+            dirs.add(md.parent)
+    if not dirs:
+        print("(no directories with documents)")
+        return
+    rows = []
+    for d in sorted(dirs):
+        rel = d.relative_to(root).as_posix() or "."
+        count = sum(1 for p in d.iterdir() if p.is_file() and p.suffix == ".md")
+        phase = engine.current_phase(config, d)
+        rows.append((rel, count, phase.name if phase else ""))
+    rel_w = max(len(r[0]) for r in rows)
+    for rel, count, phase in rows:
+        suffix = f"  [{phase}]" if phase else ""
+        print(f"  {rel:{rel_w}s}  {count} doc{'s' if count != 1 else ''}{suffix}")
+
+
 def _cmd_audit(args: argparse.Namespace) -> None:
     config = _load_config()
     log_dir = config.root / ".markstate"
@@ -1135,6 +1157,9 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("directory", nargs="?", default=None)
     _add_set_arg(p)
 
+    # list
+    sub.add_parser("list", help="List directories that contain markdown documents.")
+
     # audit
     p = sub.add_parser("audit", help="Show merged transition audit log across users.")
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
@@ -1191,6 +1216,7 @@ def main() -> None:
         "next-task": _cmd_next_task,
         "check": _cmd_check,
         "query": _cmd_query,
+        "list": _cmd_list,
         "audit": _cmd_audit,
         "install-skills": _cmd_install_skills,
     }
