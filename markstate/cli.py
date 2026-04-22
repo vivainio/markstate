@@ -5,6 +5,7 @@ import difflib
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.request
 from datetime import UTC, datetime, timedelta
@@ -459,6 +460,54 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                         print(f"created {dest.relative_to(Path.cwd())}")
 
 
+_USER_SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _audit_user(config: FlowConfig) -> tuple[str, str]:
+    """Return (identity, filename_slug) for the current git user."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(config.root), "config", "user.email"],
+            capture_output=True, text=True, check=False, timeout=2,
+        )
+        email = result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        email = ""
+    identity = email or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+    slug = _USER_SLUG_RE.sub("_", identity).strip("_") or "unknown"
+    return identity, slug
+
+
+def _append_audit_log(
+    config: FlowConfig,
+    target: Path,
+    transition_name: str,
+    old: str,
+    new: str,
+    set_fields: dict[str, str] | None = None,
+) -> None:
+    identity, slug = _audit_user(config)
+    try:
+        doc_rel = str(target.resolve().relative_to(config.root.resolve()))
+    except ValueError:
+        doc_rel = str(target)
+    entry = {
+        "ts": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "user": identity,
+        "transition": transition_name,
+        "doc": doc_rel,
+        "from": old,
+        "to": new,
+    }
+    if set_fields:
+        entry["set"] = dict(set_fields)
+    log_dir = config.root / ".markstate"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"audit-{slug}.log"
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
 def _report_transition(
     phase_before: Phase | None, phase_after: Phase | None, config: FlowConfig, directory: Path
 ) -> None:
@@ -518,6 +567,9 @@ def _cmd_do(args: argparse.Namespace) -> None:
             args.transition_name, target, config, provided_keys=set(cli_set.keys())
         )
         print(f"{args.target}: {old} → {new}")
+        t_def = next((t for t in config.transitions if t.name == args.transition_name), None)
+        merged_set = {**(t_def.set_fields if t_def else {}), **cli_set}
+        _append_audit_log(config, target, args.transition_name, old, new, merged_set)
     except TransitionError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
