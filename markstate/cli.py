@@ -709,6 +709,32 @@ def _cmd_status(args: argparse.Namespace) -> None:
             print(f"  {p['name']:{phase_width}s}  {state}")
 
 
+_PHASE_ICON_KEYWORDS = [
+    ("done", "🎉"),
+    ("complete", "🎉"),
+    ("release", "🚀"),
+    ("ship", "🚀"),
+    ("review", "👀"),
+    ("impl", "🚧"),
+    ("code", "🚧"),
+    ("build", "🚧"),
+    ("test", "🧪"),
+    ("spec", "📐"),
+    ("tech", "📐"),
+    ("design", "📐"),
+    ("draft", "📝"),
+    ("propos", "💭"),
+]
+
+
+def _phase_icon(phase_name: str) -> str | None:
+    lower = phase_name.lower()
+    for kw, icon in _PHASE_ICON_KEYWORDS:
+        if kw in lower:
+            return icon
+    return None
+
+
 _STATUS_ORDER = {
     "draft": 0,
     "proposed": 1,
@@ -990,9 +1016,11 @@ def _cmd_list(args: argparse.Namespace) -> None:
                 s = None
             if s:
                 statuses.append(str(s))
-        least = min(statuses, key=lambda s: _STATUS_ORDER.get(s, -1)) if statuses else ""
-        icon = _STATUS_EMOJI.get(least, "📄") if least else "📄"
         phase = engine.current_phase(config, d)
+        icon = _phase_icon(phase.name) if phase else None
+        if icon is None:
+            least = min(statuses, key=lambda s: _STATUS_ORDER.get(s, -1)) if statuses else ""
+            icon = _STATUS_EMOJI.get(least, "📄") if least else "📄"
         info[key] = (len(docs), icon, phase.name if phase else "")
     if not info:
         print("(no directories with documents)")
