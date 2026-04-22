@@ -949,6 +949,49 @@ def _cmd_query(args: argparse.Namespace) -> None:
         print(f"  {rel:40s}  {fm_parts}")
 
 
+def _cmd_audit(args: argparse.Namespace) -> None:
+    config = _load_config()
+    log_dir = config.root / ".markstate"
+    entries: list[dict] = []
+    if log_dir.is_dir():
+        for log_path in sorted(log_dir.glob("audit-*.log")):
+            for line in log_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    entries.sort(key=lambda e: e.get("ts", ""))
+    if args.limit:
+        entries = entries[-args.limit:]
+
+    if args.as_json:
+        print(json.dumps(entries, indent=2, default=str))
+        return
+
+    if not entries:
+        print("(no audit entries)")
+        return
+
+    user_w = max(len(e.get("user", "")) for e in entries)
+    doc_w = max(len(e.get("doc", "")) for e in entries)
+    for e in entries:
+        ts = e.get("ts", "").replace("T", " ").rstrip("Z")
+        arrow = f"{e.get('from', '')} → {e.get('to', '')}"
+        line = (
+            f"{ts}  {e.get('user', ''):{user_w}s}  "
+            f"{e.get('doc', ''):{doc_w}s}  "
+            f"{arrow}  ({e.get('transition', '')})"
+        )
+        set_fields = e.get("set") or {}
+        if set_fields:
+            extras = " ".join(f"{k}={v}" for k, v in set_fields.items())
+            line += f"  [{extras}]"
+        print(line)
+
+
 def _cmd_install_skills(args: argparse.Namespace) -> None:
     target_root = Path.home() / ".claude" / "skills"
     source_root = pkg_files("markstate").joinpath("skills")
@@ -1082,6 +1125,11 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("directory", nargs="?", default=None)
     _add_set_arg(p)
 
+    # audit
+    p = sub.add_parser("audit", help="Show merged transition audit log across users.")
+    p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
+    p.add_argument("-n", "--limit", type=int, default=0, help="Show only the last N entries")
+
     # install-skills
     sub.add_parser("install-skills", help="Install markstate Claude skill to ~/.claude/skills/.")
 
@@ -1132,6 +1180,7 @@ def main() -> None:
         "next-task": _cmd_next_task,
         "check": _cmd_check,
         "query": _cmd_query,
+        "audit": _cmd_audit,
         "install-skills": _cmd_install_skills,
     }
     dispatch[args.command](args)
