@@ -116,6 +116,13 @@ def do_transition(
             f"transition '{transition_name}' requires {flags}"
         )
 
+    if t.gates:
+        unmet = [describe_condition(c) for c in t.gates if not _evaluate(c, config, target.parent)]
+        if unmet:
+            raise TransitionError(
+                f"transition '{transition_name}' blocked: " + "; ".join(unmet)
+            )
+
     doc = frontmatter.load(target)
     doc.first_keys = (config.status_field,)
     current = str(doc.get(config.status_field) or "")

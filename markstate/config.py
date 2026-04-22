@@ -24,6 +24,7 @@ class Transition:
     set_fields: dict[str, str] = field(default_factory=dict)
     unset_fields: list[str] = field(default_factory=list)
     require_set: list[str] = field(default_factory=list)
+    gates: list["Condition"] = field(default_factory=list)
 
 
 @dataclass
@@ -253,6 +254,7 @@ def _parse_transition(raw: dict) -> Transition:
         set_fields=dict(raw.get("set") or {}),
         unset_fields=list(raw.get("unset") or []),
         require_set=list(raw.get("require_set") or []),
+        gates=[_parse_condition(c) for c in raw.get("gates") or []],
     )
 
 

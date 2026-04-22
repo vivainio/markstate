@@ -501,6 +501,43 @@ def test_do_transition_require_set_passes_when_provided(tmp_path):
     assert engine.frontmatter.load(spec).get("status") == "blocked"
 
 
+def test_do_transition_gates_block_when_sibling_unmet(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[
+            Transition(
+                "close", "accepted", "closed",
+                gates=[Condition(file="recap.md", status=["accepted", "done", "closed"])],
+            ),
+        ],
+    )
+    proposal = tmp_path / "proposal.md"
+    write_md(proposal, status="accepted")
+    with pytest.raises(engine.TransitionError, match="blocked"):
+        engine.do_transition("close", proposal, cfg)
+    assert engine.frontmatter.load(proposal).get("status") == "accepted"
+
+
+def test_do_transition_gates_pass_when_sibling_met(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[
+            Transition(
+                "close", "accepted", "closed",
+                gates=[Condition(file="recap.md", status=["accepted", "done", "closed"])],
+            ),
+        ],
+    )
+    proposal = tmp_path / "proposal.md"
+    write_md(proposal, status="accepted")
+    recap = tmp_path / "recap.md"
+    write_md(recap, status="accepted")
+    engine.do_transition("close", proposal, cfg)
+    assert engine.frontmatter.load(proposal).get("status") == "closed"
+
+
 def test_check_require_set_reports_all_missing():
     t = Transition("skip", "draft", "skipped", require_set=["a", "b", "c"])
     assert engine.check_require_set(t, {"b"}) == ["a", "c"]
