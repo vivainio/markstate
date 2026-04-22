@@ -500,7 +500,8 @@ def _append_audit_log(
         "to": new,
     }
     if set_fields:
-        entry["set"] = dict(set_fields)
+        resolved = {k: engine.resolve_magic(str(v)) for k, v in set_fields.items()}
+        entry["set"] = {k: v if isinstance(v, str) else str(v) for k, v in resolved.items()}
     log_dir = config.root / ".markstate"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"audit-{slug}.log"
