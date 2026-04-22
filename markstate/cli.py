@@ -166,7 +166,10 @@ def _resolve_directory(args: argparse.Namespace, config: FlowConfig | None) -> P
 def _load_config() -> FlowConfig:
     config = _try_load_config()
     if config is None:
-        print("error: flow.yml not found", file=sys.stderr)
+        print(
+            f"error: flow.yml not found (searched from {Path.cwd()} upward)",
+            file=sys.stderr,
+        )
         sys.exit(1)
     return config
 
