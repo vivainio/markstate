@@ -1128,7 +1128,8 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     # audit
     p = sub.add_parser("audit", help="Show merged transition audit log across users.")
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
-    p.add_argument("-n", "--limit", type=int, default=0, help="Show only the last N entries")
+    p.add_argument("-n", "--limit", type=int, default=20,
+                   help="Show only the last N entries (default: 20, 0 for all)")
 
     # install-skills
     sub.add_parser("install-skills", help="Install markstate Claude skill to ~/.claude/skills/.")
