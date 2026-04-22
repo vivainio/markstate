@@ -709,6 +709,23 @@ def _cmd_status(args: argparse.Namespace) -> None:
             print(f"  {p['name']:{phase_width}s}  {state}")
 
 
+_STATUS_ORDER = {
+    "draft": 0,
+    "proposed": 1,
+    "in-progress": 2,
+    "wip": 2,
+    "blocked": 2,
+    "in-review": 3,
+    "reviewed": 4,
+    "approved": 5,
+    "accepted": 5,
+    "done": 6,
+    "complete": 6,
+    "archived": 7,
+    "rejected": 7,
+}
+
+
 _STATUS_EMOJI = {
     "draft": "📝",
     "proposed": "💭",
@@ -965,16 +982,16 @@ def _cmd_list(args: argparse.Namespace) -> None:
         if key in info:
             continue
         docs = [p for p in d.iterdir() if p.is_file() and p.suffix == ".md"]
-        counts: dict[str, int] = {}
+        statuses: list[str] = []
         for p in docs:
             try:
                 s = frontmatter.load(p).get(status_field)
             except Exception:
                 s = None
             if s:
-                counts[str(s)] = counts.get(str(s), 0) + 1
-        dominant = max(counts, key=counts.get) if counts else ""
-        icon = _STATUS_EMOJI.get(dominant, "📄") if dominant else "📄"
+                statuses.append(str(s))
+        least = min(statuses, key=lambda s: _STATUS_ORDER.get(s, -1)) if statuses else ""
+        icon = _STATUS_EMOJI.get(least, "📄") if least else "📄"
         phase = engine.current_phase(config, d)
         info[key] = (len(docs), icon, phase.name if phase else "")
     if not info:
