@@ -964,8 +964,15 @@ def _cmd_audit(args: argparse.Namespace) -> None:
                 except json.JSONDecodeError:
                     continue
     entries.sort(key=lambda e: e.get("ts", ""))
-    if args.limit:
-        entries = entries[-args.limit:]
+    if args.days > 0:
+        cutoff = datetime.now(UTC) - timedelta(days=args.days)
+        def _parse_ts(s: str) -> datetime | None:
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        entries = [e for e in entries
+                   if (ts := _parse_ts(e.get("ts", ""))) is not None and ts >= cutoff]
 
     if args.as_json:
         print(json.dumps(entries, indent=2, default=str))
@@ -1128,8 +1135,8 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     # audit
     p = sub.add_parser("audit", help="Show merged transition audit log across users.")
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
-    p.add_argument("-n", "--limit", type=int, default=20,
-                   help="Show only the last N entries (default: 20, 0 for all)")
+    p.add_argument("--days", type=float, default=1.0,
+                   help="Show entries from the last N days (default: 1, 0 for all)")
 
     # install-skills
     sub.add_parser("install-skills", help="Install markstate Claude skill to ~/.claude/skills/.")
