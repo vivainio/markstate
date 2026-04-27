@@ -1,6 +1,7 @@
 """State engine: evaluate conditions and execute transitions."""
 
 import subprocess
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -16,7 +17,27 @@ from markstate.config import (
 )
 
 
+@dataclass
+class TransitionContext:
+    """Argument passed to flow_hooks.py on_transition.
+
+    frontmatter is the live dict; mutations are persisted when the
+    transition commits. Raise HookAbort from the hook to veto.
+    """
+    doc_path: Path
+    frontmatter: dict
+    transition: str
+    from_state: str
+    to_state: str
+    config: "FlowConfig"
+
+
 class TransitionError(Exception):
+    pass
+
+
+class HookAbort(TransitionError):
+    """Raise from a flow_hooks.py hook to cleanly veto a transition."""
     pass
 
 
@@ -136,6 +157,18 @@ def do_transition(
     doc.set(config.status_field, t.to_state)
     unset_keys(doc, t.unset_fields)
     apply_fields(doc, t.set_fields)
+
+    hook = config.load_hook("on_transition")
+    if hook is not None:
+        hook(TransitionContext(
+            doc_path=target,
+            frontmatter=doc.front_matter,
+            transition=transition_name,
+            from_state=current,
+            to_state=t.to_state,
+            config=config,
+        ))
+
     doc.save()
     return current, t.to_state
 

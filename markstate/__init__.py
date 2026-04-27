@@ -10,7 +10,9 @@ from markstate.config import (
     find_and_load,
 )
 from markstate.engine import (
+    HookAbort,
     TaskNotFoundError,
+    TransitionContext,
     TransitionError,
     check_gate,
     check_task,
@@ -34,6 +36,8 @@ __all__ = [
     "find_and_load",
     # engine
     "TransitionError",
+    "HookAbort",
+    "TransitionContext",
     "TaskNotFoundError",
     "current_phase",
     "check_gate",

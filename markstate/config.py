@@ -1,8 +1,10 @@
 """Load and validate flow.yml, walking up from cwd to find it."""
 
+import importlib.util
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import ModuleType
 
 import yaml
 
@@ -14,6 +16,7 @@ def _to_glob(pattern: str) -> str:
 
 CONFIG_FILENAME = "flow.yml"
 HIDDEN_CONFIG_PATH = ".markstate/flow.yml"
+HOOKS_FILENAME = "flow_hooks.py"
 
 
 @dataclass
@@ -86,6 +89,37 @@ class FlowConfig:
     phases: list[Phase]
     transitions: list[Transition]
     exclude_dirs: set[str] = field(default_factory=lambda: set(_DEFAULT_EXCLUDE_DIRS))
+    hook_dirs: tuple[Path, ...] = ()
+    _hooks_module: ModuleType | None | bool = False  # False = not yet loaded
+
+    def __post_init__(self) -> None:
+        if not self.hook_dirs:
+            self.hook_dirs = (self.root,)
+
+    def load_hook(self, name: str):
+        """Return the named callable from flow_hooks.py.
+
+        Searches each directory in `hook_dirs` (project flow.yml first,
+        any `use:` target last) and returns the first hook found.
+        """
+        if self._hooks_module is False:
+            self._hooks_module = self._import_hooks_module()
+        if self._hooks_module is None:
+            return None
+        return getattr(self._hooks_module, name, None)
+
+    def _import_hooks_module(self) -> ModuleType | None:
+        for d in self.hook_dirs:
+            hooks_path = d / HOOKS_FILENAME
+            if not hooks_path.exists():
+                continue
+            spec = importlib.util.spec_from_file_location(
+                f"markstate_flow_hooks_{id(self)}", hooks_path
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        return None
 
     def transition(self, name: str) -> Transition | None:
         return next((t for t in self.transitions if t.name == name), None)
@@ -175,6 +209,7 @@ def _load(path: Path) -> FlowConfig:
         return _load(target)
 
     config_dir = path.parent
+    hook_dirs: tuple[Path, ...] = (config_dir,)
 
     if "use" in raw:
         use_path = Path(raw["use"]).expanduser()
@@ -183,6 +218,10 @@ def _load(path: Path) -> FlowConfig:
         base = yaml.safe_load(use_path.read_text(encoding="utf-8"))
         # Local keys override the imported definition
         merged = {**base, **{k: v for k, v in raw.items() if k != "use"}}
+        # Fall back to hooks beside the use: target if the project has none
+        use_dir = use_path.parent
+        if use_dir != config_dir:
+            hook_dirs = (config_dir, use_dir)
     else:
         merged = raw
 
@@ -207,6 +246,7 @@ def _load(path: Path) -> FlowConfig:
         phases=phases,
         transitions=transitions,
         exclude_dirs=exclude_dirs,
+        hook_dirs=hook_dirs,
     )
 
 

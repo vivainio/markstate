@@ -14,6 +14,7 @@ from markstate.config import (
     ProducedDir,
     ProducedDoc,
     Transition,
+    find_and_load,
 )
 
 
@@ -602,3 +603,121 @@ def test_do_transition_once_field_preserved_on_reapply(tmp_path):
     engine.do_transition("reopen", spec, cfg)
     engine.do_transition("accept", spec, cfg)
     assert engine.frontmatter.load(spec).get("first-accepted-at") == first
+
+
+# --- flow_hooks.py on_transition ---
+
+
+def _write_hooks(tmp_path: Path, body: str) -> None:
+    (tmp_path / "flow_hooks.py").write_text(body)
+
+
+def test_hook_can_stamp_frontmatter(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[Transition("accept", "draft", "accepted")],
+    )
+    _write_hooks(tmp_path, """
+def on_transition(ctx):
+    ctx.frontmatter["stamped-by-hook"] = f"{ctx.from_state}->{ctx.to_state}"
+""")
+    write_md(tmp_path / "spec.md", status="draft")
+    engine.do_transition("accept", tmp_path / "spec.md", cfg)
+    doc = engine.frontmatter.load(tmp_path / "spec.md")
+    assert doc.get("stamped-by-hook") == "draft->accepted"
+    assert doc.get("status") == "accepted"
+
+
+def test_hook_abort_vetoes_transition(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[Transition("accept", "draft", "accepted")],
+    )
+    _write_hooks(tmp_path, """
+from markstate import HookAbort, TransitionContext
+def on_transition(ctx: TransitionContext):
+    raise HookAbort("approver required")
+""")
+    spec = tmp_path / "spec.md"
+    write_md(spec, status="draft")
+    with pytest.raises(engine.HookAbort, match="approver required"):
+        engine.do_transition("accept", spec, cfg)
+    # File untouched
+    assert engine.frontmatter.load(spec).get("status") == "draft"
+
+
+def test_no_hooks_file_is_fine(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[Transition("accept", "draft", "accepted")],
+    )
+    write_md(tmp_path / "spec.md", status="draft")
+    engine.do_transition("accept", tmp_path / "spec.md", cfg)
+    assert engine.frontmatter.load(tmp_path / "spec.md").get("status") == "accepted"
+
+
+def test_hook_bug_propagates_traceback(tmp_path):
+    cfg = make_config(
+        tmp_path,
+        [],
+        transitions=[Transition("accept", "draft", "accepted")],
+    )
+    _write_hooks(tmp_path, """
+def on_transition(ctx):
+    raise KeyError("typo")
+""")
+    spec = tmp_path / "spec.md"
+    write_md(spec, status="draft")
+    # Non-HookAbort exceptions propagate as-is, not wrapped
+    with pytest.raises(KeyError):
+        engine.do_transition("accept", spec, cfg)
+
+
+def _write_use_pair(tmp_path: Path) -> tuple[Path, Path]:
+    """Create a project flow.yml that uses: a shared flow.yml. Returns (project, shared) dirs."""
+    shared = tmp_path / "shared"
+    project = tmp_path / "project"
+    shared.mkdir()
+    project.mkdir()
+    (shared / "flow.yml").write_text(
+        "phases: []\n"
+        "transitions:\n"
+        "  - name: accept\n"
+        "    from: draft\n"
+        "    to: accepted\n"
+    )
+    (project / "flow.yml").write_text(f"use: {shared / 'flow.yml'}\n")
+    return project, shared
+
+
+def test_hook_loads_from_use_target_when_project_has_none(tmp_path):
+    project, shared = _write_use_pair(tmp_path)
+    (shared / "flow_hooks.py").write_text("""
+def on_transition(ctx):
+    ctx.frontmatter["stamped-by"] = "shared"
+""")
+    cfg = find_and_load(project)
+    spec = project / "spec.md"
+    write_md(spec, status="draft")
+    engine.do_transition("accept", spec, cfg)
+    assert frontmatter.load(spec).get("stamped-by") == "shared"
+
+
+def test_project_hook_overrides_use_target_hook(tmp_path):
+    project, shared = _write_use_pair(tmp_path)
+    (shared / "flow_hooks.py").write_text("""
+def on_transition(ctx):
+    ctx.frontmatter["stamped-by"] = "shared"
+""")
+    (project / "flow_hooks.py").write_text("""
+def on_transition(ctx):
+    ctx.frontmatter["stamped-by"] = "project"
+""")
+    cfg = find_and_load(project)
+    spec = project / "spec.md"
+    write_md(spec, status="draft")
+    engine.do_transition("accept", spec, cfg)
+    assert frontmatter.load(spec).get("stamped-by") == "project"

@@ -77,6 +77,32 @@ def test_sdd_full_workflow(tmp_path):
     assert "done" in result.stdout
 
 
+def test_sdd_hook_stamps_and_aborts(tmp_path):
+    """flow_hooks.py beside flow.yml runs on transitions."""
+    shutil.copy(EXAMPLES_DIR / "sdd" / "flow.yml", tmp_path / "flow.yml")
+    shutil.copy(EXAMPLES_DIR / "sdd" / "flow_hooks.py", tmp_path / "flow_hooks.py")
+
+    run(["new", "changes/PROJ-1.add-feature"], tmp_path)
+    change = tmp_path / "changes" / "PROJ-1.add-feature"
+    proposal = change / "proposal.md"
+
+    # Stamp path: hook adds accepted-via-hook on accept
+    result = run(["do", "accept", "proposal.md"], change)
+    assert result.returncode == 0
+    assert "accepted-via-hook: true" in proposal.read_text()
+
+    # Reopen, then add the veto flag and try to accept again
+    run(["do", "reopen", "proposal.md"], change)
+    text = proposal.read_text()
+    proposal.write_text(text.replace("status: draft", "status: draft\nblock-accept: true"))
+
+    result = run(["do", "accept", "proposal.md"], change)
+    assert result.returncode == 1
+    assert "block-accept" in result.stderr
+    # File must remain at draft — hook aborted before save
+    assert "status: draft" in proposal.read_text()
+
+
 def test_sdd_reopen_blocks_advance(tmp_path):
     """Reopening an accepted proposal should block phase advancement."""
     shutil.copy(EXAMPLES_DIR / "sdd" / "flow.yml", tmp_path / "flow.yml")
@@ -263,3 +289,22 @@ def test_scoped_tracks_independent(tmp_path):
     # change is still in drafting while plan is done
     result = run(["status"], plan)
     assert "plans-done" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# use-fallback example
+# ---------------------------------------------------------------------------
+
+
+def test_use_fallback_loads_hook_from_shared(tmp_path):
+    """A project flow.yml with `use:` and no local hook picks up the shared one."""
+    src = EXAMPLES_DIR / "use-fallback"
+    shutil.copytree(src, tmp_path / "use-fallback")
+    project = tmp_path / "use-fallback" / "project"
+
+    result = run(["new", "proposal.md"], project)
+    assert result.returncode == 0
+
+    result = run(["do", "accept", "proposal.md"], project)
+    assert result.returncode == 0
+    assert "stamped-by: shared" in (project / "proposal.md").read_text()

@@ -1,0 +1,31 @@
+# Canonical flow shared across many projects.
+# Projects pick this up via `use:` (see ../project/flow.yml).
+#
+# A `flow_hooks.py` lives alongside this file. When a project's flow.yml
+# uses this one and has no flow_hooks.py of its own, markstate falls back
+# to the hook here — so the shared flow can ship default behavior (e.g.
+# stamp Jira on every transition) without per-project setup.
+
+phases:
+  - name: drafting
+    produces:
+      - file: proposal.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Proposal
+    advance_when:
+      - file: proposal.md
+        status: accepted
+
+  - name: done
+    gates:
+      - file: proposal.md
+        status: accepted
+
+transitions:
+  - name: accept
+    from: draft
+    to: accepted

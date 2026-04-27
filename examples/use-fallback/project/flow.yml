@@ -1,0 +1,4 @@
+# Project flow.yml — points at the shared canonical flow.
+# No flow_hooks.py here, so markstate falls back to the one beside the
+# `use:` target.
+use: ../shared/flow.yml
