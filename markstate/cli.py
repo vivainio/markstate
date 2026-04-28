@@ -18,6 +18,7 @@ import yaml
 from markstate import engine, frontmatter
 from markstate.config import (
     FlowConfig,
+    FlowConfigError,
     Phase,
     ProducedDir,
     ProducedDoc,
@@ -79,6 +80,9 @@ def _try_load_config() -> FlowConfig | None:
         return find_and_load()
     except FileNotFoundError:
         return None
+    except FlowConfigError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _read_focus(config: FlowConfig) -> Path | None:
@@ -164,14 +168,17 @@ def _resolve_directory(args: argparse.Namespace, config: FlowConfig | None) -> P
 
 
 def _load_config() -> FlowConfig:
-    config = _try_load_config()
-    if config is None:
+    try:
+        return find_and_load()
+    except FileNotFoundError:
         print(
             f"error: flow.yml not found (searched from {Path.cwd()} upward)",
             file=sys.stderr,
         )
         sys.exit(1)
-    return config
+    except FlowConfigError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 TEMPLATE_FLOW = """\

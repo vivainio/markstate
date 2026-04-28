@@ -19,6 +19,10 @@ HIDDEN_CONFIG_PATH = ".markstate/flow.yml"
 HOOKS_FILENAME = "flow_hooks.py"
 
 
+class FlowConfigError(Exception):
+    """Raised when flow.yml is found but cannot be loaded (broken redirect, missing use target, etc.)."""
+
+
 @dataclass
 class Transition:
     name: str
@@ -184,7 +188,12 @@ def find_flow_target(start: Path | None = None) -> Path:
         redirect = raw.get("redirect")
         if not redirect:
             return path
-        path = (path.parent / redirect).resolve()
+        target = (path.parent / redirect).resolve()
+        if not target.exists():
+            raise FlowConfigError(
+                f"redirect target not found: {target} (referenced from {path})"
+            )
+        path = target
 
 
 def has_use(path: Path) -> bool:
@@ -206,6 +215,10 @@ def _load(path: Path) -> FlowConfig:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if "redirect" in raw:
         target = (path.parent / raw["redirect"]).resolve()
+        if not target.exists():
+            raise FlowConfigError(
+                f"redirect target not found: {target} (referenced from {path})"
+            )
         return _load(target)
 
     config_dir = path.parent
@@ -215,6 +228,10 @@ def _load(path: Path) -> FlowConfig:
         use_path = Path(raw["use"]).expanduser()
         if not use_path.is_absolute():
             use_path = (config_dir / use_path).resolve()
+        if not use_path.exists():
+            raise FlowConfigError(
+                f"use target not found: {use_path} (referenced from {path})"
+            )
         base = yaml.safe_load(use_path.read_text(encoding="utf-8"))
         # Local keys override the imported definition
         merged = {**base, **{k: v for k, v in raw.items() if k != "use"}}
