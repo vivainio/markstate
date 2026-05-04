@@ -602,3 +602,49 @@ def test_do_applies_transition_set_and_once_is_stable(tmp_path):
     assert m2.group(1) == first_ts, "once- field should not be overwritten on re-accept"
     # accepted-at (non-once) must update on every accept
     assert "accepted-at:" in second_text
+
+
+# --- doctor ---
+
+
+def test_doctor_clean(tmp_path):
+    setup_flow(tmp_path)
+    result = run(["doctor"], tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ok" in result.stdout
+    assert str(tmp_path / "flow.yml") in result.stdout
+
+
+def test_doctor_detects_broken_symlink(tmp_path):
+    setup_flow(tmp_path)
+    (tmp_path / "broken.md").symlink_to("nonexistent.md")
+    result = run(["doctor"], tmp_path)
+    assert result.returncode == 1
+    assert "broken symlink" in result.stdout
+
+
+def test_doctor_detects_broken_redirect(tmp_path):
+    (tmp_path / "flow.yml").write_text("redirect: ./missing.yml\n")
+    result = run(["doctor"], tmp_path)
+    assert result.returncode == 1
+    assert "redirect target missing" in result.stdout
+
+
+def test_doctor_detects_broken_use(tmp_path):
+    (tmp_path / "flow.yml").write_text("use: ./missing.yml\n")
+    result = run(["doctor"], tmp_path)
+    assert result.returncode == 1
+    assert "use target missing" in result.stdout
+
+
+def test_doctor_follows_redirect_chain(tmp_path):
+    docs = tmp_path / "docs"
+    src = tmp_path / "src"
+    docs.mkdir()
+    src.mkdir()
+    (docs / "flow.yml").write_text(SIMPLE_FLOW)
+    (src / "flow.yml").write_text("redirect: ../docs/flow.yml\n")
+    result = run(["doctor"], src)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "redirect →" in result.stdout
+    assert str(docs / "flow.yml") in result.stdout

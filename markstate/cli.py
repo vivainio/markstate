@@ -17,6 +17,8 @@ import yaml
 
 from markstate import engine, frontmatter
 from markstate.config import (
+    CONFIG_FILENAME,
+    HIDDEN_CONFIG_PATH,
     FlowConfig,
     FlowConfigError,
     Phase,
@@ -27,6 +29,7 @@ from markstate.config import (
     find_flow_target,
     has_use,
 )
+from markstate.config import _find as _find_flow
 from markstate.engine import TaskNotFoundError, TransitionError
 
 FOCUS_FILE = ".markstate-focus"
@@ -1104,6 +1107,130 @@ def _cmd_audit(args: argparse.Namespace) -> None:
         print(line)
 
 
+def _git_age(path: Path) -> str | None:
+    """Return 'NN <unit> ago  (<hash>)' for the last commit touching path, or None."""
+    real = path.resolve(strict=False)
+    if not real.exists():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cr  (%h)", "--", real.name],
+            cwd=real.parent, capture_output=True, text=True, timeout=2, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = result.stdout.strip()
+    return out or None
+
+
+def _cmd_doctor(args: argparse.Namespace) -> None:
+    problems: list[str] = []
+    chain_lines: list[str] = []
+
+    start = _find_flow(Path.cwd())
+    if start is None:
+        print(f"error: {CONFIG_FILENAME} not found (searched from {Path.cwd()} upward)", file=sys.stderr)
+        sys.exit(1)
+
+    def _link_note(p: Path) -> str:
+        if p.is_symlink():
+            try:
+                tgt = os.readlink(p)
+            except OSError as e:
+                return f"  (symlink, unreadable: {e})"
+            real = p.resolve(strict=False)
+            note = f"  (symlink → {tgt})"
+            if not real.exists():
+                problems.append(f"broken symlink: {p} → {tgt}")
+                note += "  ✗ dangling"
+            return note
+        # Not a direct symlink, but a parent component might be.
+        real = p.resolve(strict=False)
+        if real != p.absolute() and p.exists():
+            return f"  (via symlink → {real})"
+        return ""
+
+    def _age_suffix(p: Path) -> str:
+        age = _git_age(p)
+        return f"  [{age}]" if age else ""
+
+    seen: set[Path] = set()
+    path = start
+    final: Path | None = None
+    while True:
+        chain_lines.append(f"  {path}{_link_note(path)}{_age_suffix(path)}")
+        resolved = path.resolve(strict=False)
+        if resolved in seen:
+            problems.append(f"redirect cycle at {resolved}")
+            break
+        seen.add(resolved)
+        if not path.exists():
+            problems.append(f"flow file missing: {path}")
+            break
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as e:
+            problems.append(f"invalid YAML in {path}: {e}")
+            break
+        redirect = raw.get("redirect")
+        if redirect:
+            target = (path.parent / redirect).resolve()
+            chain_lines.append(f"    redirect → {target}")
+            if not target.exists():
+                problems.append(f"redirect target missing: {target} (from {path})")
+                break
+            path = target
+            continue
+        final = path
+        if "use" in raw:
+            use_raw = raw["use"]
+            use_path = Path(use_raw).expanduser()
+            if not use_path.is_absolute():
+                use_path = (path.parent / use_path).resolve()
+            chain_lines.append(f"    use: {use_raw} → {use_path}{_link_note(use_path)}{_age_suffix(use_path)}")
+            if not use_path.exists():
+                problems.append(f"use target missing: {use_path} (from {path})")
+        break
+
+    print("flow chain:")
+    for line in chain_lines:
+        print(line)
+
+    config = None
+    if final is not None and not problems:
+        try:
+            config = find_and_load()
+        except (FileNotFoundError, FlowConfigError) as e:
+            problems.append(f"config load failed: {e}")
+
+    if config is not None:
+        print()
+        print(f"docs_root: {config.docs_root}")
+        bad = 0
+        for p in config.docs_root.rglob("*"):
+            if config.exclude_dirs & set(p.relative_to(config.docs_root).parts):
+                continue
+            if p.is_symlink() and not p.exists():
+                try:
+                    tgt = os.readlink(p)
+                except OSError:
+                    tgt = "?"
+                problems.append(f"broken symlink: {p} → {tgt}")
+                bad += 1
+            elif args.verbose and p.is_symlink():
+                print(f"  symlink: {p.relative_to(config.docs_root)} → {os.readlink(p)}")
+        if not bad and not args.verbose:
+            print("  no broken symlinks under docs_root")
+
+    print()
+    if problems:
+        print(f"{len(problems)} problem(s):")
+        for prob in problems:
+            print(f"  ✗ {prob}")
+        sys.exit(1)
+    print("ok")
+
+
 def _cmd_install_skills(args: argparse.Namespace) -> None:
     target_root = Path.home() / ".claude" / "skills"
     source_root = pkg_files("markstate").joinpath("skills")
@@ -1249,6 +1376,10 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     # install-skills
     sub.add_parser("install-skills", help="Install markstate Claude skill to ~/.claude/skills/.")
 
+    # doctor
+    p = sub.add_parser("doctor", help="Validate flow.yml chain and check for broken symlinks under docs_root.")
+    p.add_argument("--verbose", "-v", action="store_true", help="Show all symlinks, not just broken ones.")
+
     # query
     p = sub.add_parser(
         "query",
@@ -1269,7 +1400,14 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
 
 def main() -> None:
     global _focus_override
-    config = _try_load_config()
+    # doctor needs to run even when flow.yml is broken — skip the eager load.
+    is_doctor = "doctor" in sys.argv[1:]
+    try:
+        config = None if is_doctor else _try_load_config()
+    except SystemExit:
+        if not is_doctor:
+            raise
+        config = None
     parser = _build_parser(config)
     args = parser.parse_args()
 
@@ -1299,5 +1437,6 @@ def main() -> None:
         "list": _cmd_list,
         "audit": _cmd_audit,
         "install-skills": _cmd_install_skills,
+        "doctor": _cmd_doctor,
     }
     dispatch[args.command](args)
