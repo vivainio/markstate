@@ -605,6 +605,12 @@ def _find_focus_dir(query: str, docs_root: Path) -> Path:
     exact = [d for d in matches if d.relative_to(docs_root).as_posix() == query_normalized]
     if exact:
         matches = exact
+    else:
+        # Prefer a unique directory whose basename equals the query — descendants
+        # of that directory otherwise match via path-substring and look ambiguous.
+        name_exact = [d for d in matches if d.name == query]
+        if len(name_exact) == 1:
+            matches = name_exact
     if not matches:
         print(f"error: no directory matching '{query}' found under {docs_root}", file=sys.stderr)
         sys.exit(1)
