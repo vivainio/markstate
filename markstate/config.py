@@ -2,11 +2,62 @@
 
 import importlib.util
 import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 
 import yaml
+
+
+def _resolve_relative(flow_path: Path, rel: str) -> Path:
+    """Resolve a relative path from a flow.yml.
+
+    Tries the naive resolution first (relative to ``flow_path.parent``). If
+    that target doesn't exist and ``flow_path`` is inside a linked git
+    worktree, retries against the equivalent directory in the main working
+    tree -- so ``../foo`` works when authored against the main checkout
+    layout but executed from a worktree at e.g. ``.worktrees/feat/``.
+    """
+    parent = flow_path.parent
+    naive = (parent / rel).resolve()
+    if naive.exists():
+        return naive
+    anchor = _main_worktree_anchor(parent)
+    if anchor is None:
+        return naive
+    return (anchor / rel).resolve()
+
+
+def _main_worktree_anchor(parent: Path) -> Path | None:
+    """If ``parent`` is inside a linked git worktree, return the equivalent
+    directory under the main working tree; otherwise None."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(parent), "rev-parse", "--show-toplevel", "--git-common-dir"],
+            capture_output=True, text=True, check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    lines = result.stdout.strip().splitlines()
+    if len(lines) < 2:
+        return None
+    toplevel = Path(lines[0]).resolve()
+    common_dir = Path(lines[1])
+    if not common_dir.is_absolute():
+        common_dir = (toplevel / common_dir).resolve()
+    else:
+        common_dir = common_dir.resolve()
+    if common_dir.name != ".git":
+        return None
+    main_root = common_dir.parent
+    if main_root == toplevel:
+        return None
+    try:
+        rel = parent.resolve().relative_to(toplevel)
+    except ValueError:
+        return None
+    return main_root / rel
 
 
 def _to_glob(pattern: str) -> str:
@@ -188,7 +239,7 @@ def find_flow_target(start: Path | None = None) -> Path:
         redirect = raw.get("redirect")
         if not redirect:
             return path
-        target = (path.parent / redirect).resolve()
+        target = _resolve_relative(path, redirect)
         if not target.exists():
             raise FlowConfigError(
                 f"redirect target not found: {target} (referenced from {path})"
@@ -214,7 +265,7 @@ def _find(start: Path) -> Path | None:
 def _load(path: Path) -> FlowConfig:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if "redirect" in raw:
-        target = (path.parent / raw["redirect"]).resolve()
+        target = _resolve_relative(path, raw["redirect"])
         if not target.exists():
             raise FlowConfigError(
                 f"redirect target not found: {target} (referenced from {path})"
@@ -227,7 +278,7 @@ def _load(path: Path) -> FlowConfig:
     if "use" in raw:
         use_path = Path(raw["use"]).expanduser()
         if not use_path.is_absolute():
-            use_path = (config_dir / use_path).resolve()
+            use_path = _resolve_relative(path, str(use_path))
         if not use_path.exists():
             raise FlowConfigError(
                 f"use target not found: {use_path} (referenced from {path})"

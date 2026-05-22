@@ -1,10 +1,11 @@
 """Tests for flow.yml loading and parsing."""
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from markstate.config import ProducedDir, find_and_load
+from markstate.config import ProducedDir, find_and_load, find_flow_target
 
 
 def write_flow(tmp_path: Path, content: str) -> Path:
@@ -56,6 +57,91 @@ def test_find_walks_up(tmp_path):
 def test_find_not_found(tmp_path):
     with pytest.raises(FileNotFoundError):
         find_and_load(tmp_path)
+
+
+def test_redirect_resolves_via_main_worktree_anchor(tmp_path):
+    """In a linked git worktree, `../` in redirect/use must anchor at the
+    main working tree, not the worktrees container."""
+    project = tmp_path / "project"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(project)], check=True)
+    subprocess.run(
+        ["git", "-C", str(project), "commit", "-q", "--allow-empty", "-m", "init"],
+        check=True,
+        env={"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "PATH": __import__("os").environ["PATH"]},
+    )
+
+    # Sibling of the main project (NOT sibling of the worktrees container)
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "flow.yml").write_text("docs_root: changes\nphases: []\ntransitions: []\n")
+
+    (project / "flow.yml").write_text("redirect: ../shared/flow.yml\n")
+    project_use = tmp_path / "project_use"
+    project_use.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(project_use)], check=True)
+    subprocess.run(
+        ["git", "-C", str(project_use), "commit", "-q", "--allow-empty", "-m", "init"],
+        check=True,
+        env={"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "PATH": __import__("os").environ["PATH"]},
+    )
+    (project_use / "flow.yml").write_text("use: ../shared/flow.yml\n")
+
+    # Create a linked worktree under project/.worktrees/feat
+    wt = project / ".worktrees" / "feat"
+    subprocess.run(
+        ["git", "-C", str(project), "worktree", "add", "-q", str(wt), "-b", "feat"],
+        check=True,
+    )
+    # The worktree has the same flow.yml (it's tracked? no — untracked, but file exists on disk via copy)
+    (wt / "flow.yml").write_text("redirect: ../shared/flow.yml\n")
+
+    # Without the fix, this would resolve to tmp_path/project/.worktrees/shared/flow.yml
+    cfg = find_and_load(wt)
+    assert cfg.docs_root == (shared / "changes").resolve()
+    target = find_flow_target(wt)
+    assert target.resolve() == (shared / "flow.yml").resolve()
+
+
+def test_redirect_prefers_naive_resolution_in_worktree(tmp_path):
+    """If the naive ``../`` target exists relative to the worktree, use it --
+    don't silently retarget to the main checkout."""
+    project = tmp_path / "project"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(project)], check=True)
+    env = {
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        "PATH": __import__("os").environ["PATH"],
+    }
+    subprocess.run(
+        ["git", "-C", str(project), "commit", "-q", "--allow-empty", "-m", "init"],
+        check=True, env=env,
+    )
+
+    # Sibling of the MAIN checkout (would be picked up by the git anchor)
+    main_sibling = tmp_path / "shared"
+    main_sibling.mkdir()
+    (main_sibling / "flow.yml").write_text(
+        "docs_root: from_main\nphases: []\ntransitions: []\n"
+    )
+
+    # Worktree at project/.worktrees/feat -- and a sibling of *that* called shared
+    wt = project / ".worktrees" / "feat"
+    subprocess.run(
+        ["git", "-C", str(project), "worktree", "add", "-q", str(wt), "-b", "feat"],
+        check=True,
+    )
+    wt_sibling = project / ".worktrees" / "shared"
+    wt_sibling.mkdir()
+    (wt_sibling / "flow.yml").write_text(
+        "docs_root: from_worktree\nphases: []\ntransitions: []\n"
+    )
+    (wt / "flow.yml").write_text("redirect: ../shared/flow.yml\n")
+
+    # Naive resolution finds wt_sibling first, so that wins.
+    cfg = find_and_load(wt)
+    assert cfg.docs_root == (wt_sibling / "from_worktree").resolve()
 
 
 def test_redirect_loads_target(tmp_path):
