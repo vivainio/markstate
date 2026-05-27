@@ -1,5 +1,6 @@
 """State engine: evaluate conditions and execute transitions."""
 
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -51,12 +52,27 @@ _ONCE_PREFIX = "once-"
 def resolve_magic(value: str) -> str | date | datetime:
     """Expand magic field values: 'me', 'now', 'today'. Other values pass through."""
     if value == "me":
+        override = os.environ.get("MARKSTATE_ME", "").strip()
+        if override:
+            return override
         try:
-            return subprocess.run(
-                ["git", "config", "user.name"], capture_output=True, text=True, check=True
-            ).stdout.strip()
-        except subprocess.CalledProcessError:
-            return value
+            result = subprocess.run(
+                ["git", "config", "user.name"], capture_output=True, text=True
+            )
+        except FileNotFoundError:
+            raise TransitionError(
+                "Cannot resolve 'me': git not found on PATH. "
+                "Set MARKSTATE_ME=\"Your Name\" or install git."
+            )
+        name = result.stdout.strip()
+        if result.returncode != 0 or not name:
+            detail = result.stderr.strip() or "git user.name is not set"
+            raise TransitionError(
+                f"Cannot resolve 'me': {detail}. "
+                "Set MARKSTATE_ME=\"Your Name\" or run "
+                "`git config --global user.name \"Your Name\"`."
+            )
+        return name
     if value == "now":
         return datetime.now(UTC).replace(microsecond=0)
     if value == "today":
