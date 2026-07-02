@@ -669,6 +669,17 @@ def _cmd_focus(args: argparse.Namespace) -> None:
     print(f"focus: {rel}")
 
 
+def _cmd_which(args: argparse.Namespace) -> None:
+    config = _load_config()
+    if args.query is None:
+        print(config.docs_root)
+        return
+    target = Path(args.query).resolve()
+    if not target.is_dir():
+        target = _find_focus_dir(args.query, config.docs_root)
+    print(target)
+
+
 def _cmd_status(args: argparse.Namespace) -> None:
     config = _try_load_config()
     directory = _resolve_directory(args, config)
@@ -1396,6 +1407,10 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p = sub.add_parser("focus", help="Set or show the current task directory.")
     p.add_argument("directory", nargs="?", default=None)
 
+    # which
+    p = sub.add_parser("which", help="Resolve and print a directory's path without changing focus.")
+    p.add_argument("query", nargs="?", default=None)
+
     # status
     p = sub.add_parser("status", help="Show current phase and phase completion status.")
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
@@ -1500,6 +1515,7 @@ def main() -> None:
     dispatch = {
         "init": _cmd_init,
         "focus": _cmd_focus,
+        "which": _cmd_which,
         "set": _cmd_set,
         "update": _cmd_update,
         "new": _cmd_new,

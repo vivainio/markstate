@@ -290,6 +290,44 @@ def test_focus_fuzzy_no_match(tmp_path):
     assert "error" in result.stderr
 
 
+# --- which ---
+
+
+def test_which_resolves_without_setting_focus(tmp_path):
+    setup_flow(tmp_path)
+    task_dir = tmp_path / "tasks" / "PROJ-123.add-auth"
+    task_dir.mkdir(parents=True)
+    result = run(["which", "PROJ-123"], tmp_path)
+    assert result.returncode == 0
+    assert str(task_dir) in result.stdout
+    # focus must remain unset — which is read-only
+    focus_result = run(["focus"], tmp_path)
+    assert focus_result.stdout.strip() == "(none)"
+
+
+def test_which_no_query_prints_docs_root(tmp_path):
+    setup_flow(tmp_path)
+    result = run(["which"], tmp_path)
+    assert result.returncode == 0
+    assert result.stdout.strip() == str(tmp_path)
+
+
+def test_which_ambiguous(tmp_path):
+    setup_flow(tmp_path)
+    (tmp_path / "tasks" / "PROJ-123.add-auth").mkdir(parents=True)
+    (tmp_path / "tasks" / "PROJ-123.add-login").mkdir(parents=True)
+    result = run(["which", "PROJ-123"], tmp_path)
+    assert result.returncode == 1
+    assert "ambiguous" in result.stderr
+
+
+def test_which_no_match(tmp_path):
+    setup_flow(tmp_path)
+    result = run(["which", "PROJ-999"], tmp_path)
+    assert result.returncode == 1
+    assert "error" in result.stderr
+
+
 # --- flow-level set: annotations ---
 
 
