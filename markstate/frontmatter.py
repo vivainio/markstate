@@ -6,12 +6,12 @@ from pathlib import Path
 
 import yaml
 
-_TASK_RE = re.compile(r'^(\s*-\s+\[)([ xX])(\]\s+)(.*)', re.MULTILINE)
-_COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
+_TASK_RE = re.compile(r"^(\s*-\s+\[)([ xX])(\]\s+)(.*)", re.MULTILINE)
+_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def _strip_comments(text: str) -> str:
-    return _COMMENT_RE.sub('', text)
+    return _COMMENT_RE.sub("", text)
 
 
 DELIMITER = "---"
@@ -111,5 +111,7 @@ def _serialize(
     if not front_matter:
         return body
     ordered = _reorder(front_matter, first_keys) if first_keys else front_matter
-    raw = yaml.dump(ordered, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    raw = yaml.dump(
+        ordered, default_flow_style=False, sort_keys=False, allow_unicode=True, width=float("inf")
+    )
     return f"{DELIMITER}\n{raw}{DELIMITER}\n{body}"

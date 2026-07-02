@@ -105,9 +105,7 @@ def test_status_json(tmp_path):
 
 def test_status_shows_task_counts(tmp_path):
     setup_flow(tmp_path, TASKS_FLOW)
-    (tmp_path / "tasks.md").write_text(
-        "---\nstatus: draft\n---\n- [x] Done\n- [ ] Todo\n"
-    )
+    (tmp_path / "tasks.md").write_text("---\nstatus: draft\n---\n- [x] Done\n- [ ] Todo\n")
     result = run(["status"], tmp_path)
     assert "1/2" in result.stdout
 
@@ -432,9 +430,9 @@ def test_do_unblock_clears_blocked_fields(tmp_path):
     setup_flow(tmp_path, UNSET_FLOW)
     assert run(["new", "spec.md"], tmp_path).returncode == 0
     # block with a CLI-supplied reason
-    assert run(
-        ["do", "block", "spec.md", "--set", "blocked-reason=waiting"], tmp_path
-    ).returncode == 0
+    assert (
+        run(["do", "block", "spec.md", "--set", "blocked-reason=waiting"], tmp_path).returncode == 0
+    )
     text = (tmp_path / "spec.md").read_text()
     assert "blocked-at:" in text
     assert "blocked-reason: waiting" in text
@@ -453,6 +451,43 @@ def test_cli_unset_flag_removes_field(tmp_path):
     assert "note: temp" in (tmp_path / "spec.md").read_text()
     assert run(["set", "draft", "spec.md", "--unset", "note"], tmp_path).returncode == 0
     assert "note:" not in (tmp_path / "spec.md").read_text()
+
+
+def test_update_sets_field_without_status(tmp_path):
+    setup_flow(tmp_path, UNSET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    result = run(["update", "spec.md", "--set", "updated=2026-07-02"], tmp_path)
+    assert result.returncode == 0, result.stderr
+    text = (tmp_path / "spec.md").read_text()
+    assert "updated: '2026-07-02'" in text or "updated: 2026-07-02" in text
+    assert "status: draft" in text
+
+
+def test_update_unset_removes_field(tmp_path):
+    setup_flow(tmp_path, UNSET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    assert run(["update", "spec.md", "--set", "note=temp"], tmp_path).returncode == 0
+    assert "note: temp" in (tmp_path / "spec.md").read_text()
+    assert run(["update", "spec.md", "--unset", "note"], tmp_path).returncode == 0
+    assert "note:" not in (tmp_path / "spec.md").read_text()
+
+
+def test_update_requires_set_or_unset(tmp_path):
+    setup_flow(tmp_path, UNSET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    result = run(["update", "spec.md"], tmp_path)
+    assert result.returncode == 1
+    assert "requires at least one --set or --unset" in result.stderr
+
+
+def test_update_does_not_reflow_long_values(tmp_path):
+    setup_flow(tmp_path, UNSET_FLOW)
+    assert run(["new", "spec.md"], tmp_path).returncode == 0
+    long_desc = "x" * 120
+    result = run(["update", "spec.md", "--set", f"description={long_desc}"], tmp_path)
+    assert result.returncode == 0, result.stderr
+    text = (tmp_path / "spec.md").read_text()
+    assert f"description: {long_desc}" in text
 
 
 def test_init_creates_fresh_when_no_flow_exists(tmp_path):

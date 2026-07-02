@@ -35,8 +35,8 @@ from markstate.engine import TaskNotFoundError, TransitionError
 FOCUS_FILE = ".markstate-focus"
 FOCUS_ENV_VAR = "MARKSTATE_FOCUS"
 
-_PRED_RE = re.compile(r'^([a-zA-Z0-9_-]+)(>=|<=|!=|~=|>|<|=)(.+)$')
-_REL_AGO_RE = re.compile(r'^(\d+)([dwmy])$')
+_PRED_RE = re.compile(r"^([a-zA-Z0-9_-]+)(>=|<=|!=|~=|>|<|=)(.+)$")
+_REL_AGO_RE = re.compile(r"^(\d+)([dwmy])$")
 
 _focus_override: str | None = None
 
@@ -54,11 +54,17 @@ def _parse_set_args(set_args: list[str]) -> dict[str, str]:
 
 def _add_set_arg(p: argparse.ArgumentParser) -> None:
     p.add_argument(
-        "--set", metavar="KEY=VALUE", action="append", default=[],
+        "--set",
+        metavar="KEY=VALUE",
+        action="append",
+        default=[],
         help="Set extra frontmatter fields ('me' = git user, 'now' = UTC timestamp, 'today' = UTC date). Prefix key with 'once-' to write only when absent.",
     )
     p.add_argument(
-        "--unset", metavar="KEY", action="append", default=[],
+        "--unset",
+        metavar="KEY",
+        action="append",
+        default=[],
         help="Remove a frontmatter field (repeatable). No-op if the field is absent.",
     )
 
@@ -360,8 +366,11 @@ def _cmd_new(args: argparse.Namespace) -> None:
         produced = all_files.get(args.file)
         if produced is None:
             available = list(all_files.keys())
-            print(f"error: '{args.file}' is not in this dir template. "
-                  f"Available: {', '.join(available)}", file=sys.stderr)
+            print(
+                f"error: '{args.file}' is not in this dir template. "
+                f"Available: {', '.join(available)}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         target = cwd / args.file
         _write_doc(produced, target, args.force, config.status_field)
@@ -403,7 +412,9 @@ def _cmd_new(args: argparse.Namespace) -> None:
                 if isinstance(entry, ProducedDir) and rel.match(entry.glob_pattern):
                     _write_dir_files(entry.files, resolved, args.force)
                     for f in entry.files:
-                        _apply_frontmatter_edits(resolved / f.file, extra, extra_unset, config.status_field)
+                        _apply_frontmatter_edits(
+                            resolved / f.file, extra, extra_unset, config.status_field
+                        )
                     return
     # Collect all producible patterns for the hint
     hints = []
@@ -452,7 +463,9 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
             if not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(entry.template, encoding="utf-8")
-                _apply_frontmatter_edits(dest, entry.set_fields, entry.unset_fields, config.status_field)
+                _apply_frontmatter_edits(
+                    dest, entry.set_fields, entry.unset_fields, config.status_field
+                )
                 print(f"created {dest.relative_to(Path.cwd())}")
         elif isinstance(entry, ProducedDir):
             # Auto-create files inside existing directories matching the pattern.
@@ -469,7 +482,9 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                     if not dest.exists():
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_text(f.template, encoding="utf-8")
-                        _apply_frontmatter_edits(dest, f.set_fields, f.unset_fields, config.status_field)
+                        _apply_frontmatter_edits(
+                            dest, f.set_fields, f.unset_fields, config.status_field
+                        )
                         print(f"created {dest.relative_to(Path.cwd())}")
 
 
@@ -481,7 +496,10 @@ def _audit_user(config: FlowConfig) -> tuple[str, str]:
     try:
         result = subprocess.run(
             ["git", "-C", str(config.root), "config", "user.email"],
-            capture_output=True, text=True, check=False, timeout=2,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2,
         )
         email = result.stdout.strip()
     except (OSError, subprocess.SubprocessError):
@@ -562,6 +580,20 @@ def _cmd_set(args: argparse.Namespace) -> None:
         print(f"{t}: {old or '(none)'} → {args.status}")
 
 
+def _cmd_update(args: argparse.Namespace) -> None:
+    extra = _parse_set_args(args.set)
+    if not extra and not args.unset:
+        print("error: 'update' requires at least one --set or --unset", file=sys.stderr)
+        sys.exit(1)
+    for t in args.targets:
+        target = _resolve_file(t, _try_load_config())
+        if not target.exists():
+            print(f"error: '{t}' does not exist", file=sys.stderr)
+            sys.exit(1)
+        _apply_frontmatter_edits(target, extra, args.unset)
+        print(f"{t}: updated")
+
+
 def _cmd_do(args: argparse.Namespace) -> None:
     config = _load_config()
     directory = _resolve_doc_base(config)
@@ -597,7 +629,8 @@ def _cmd_do(args: argparse.Namespace) -> None:
 def _find_focus_dir(query: str, docs_root: Path) -> Path:
     """Find a unique directory under docs_root whose name contains query as a substring."""
     matches = [
-        d for d in filtered_rglob(docs_root, "*")
+        d
+        for d in filtered_rglob(docs_root, "*")
         if d.is_dir() and (query in d.name or query in str(d.relative_to(docs_root)))
     ]
     # If query matches a relative path exactly, prefer that over substring matches
@@ -698,17 +731,16 @@ def _cmd_status(args: argparse.Namespace) -> None:
             common = None
             strip = 0
 
-        short_names = {
-            rel: str(Path(*Path(rel).parts[strip:])) if strip else rel
-            for rel in files
-        }
+        short_names = {rel: str(Path(*Path(rel).parts[strip:])) if strip else rel for rel in files}
         name_width = max(len(s) for s in short_names.values())
-        status_width = max(
-            (len(str(e.get("status", ""))) for e in files.values()), default=0
-        )
+        status_width = max((len(str(e.get("status", ""))) for e in files.values()), default=0)
         for rel, entry in files.items():
             s = entry.get("status", "")
-            task_info = f"  {entry['tasks_done']}/{entry['tasks_total']} tasks" if "tasks_total" in entry else ""
+            task_info = (
+                f"  {entry['tasks_done']}/{entry['tasks_total']} tasks"
+                if "tasks_total" in entry
+                else ""
+            )
             short = short_names[rel]
             print(f"    {short:{name_width}s}  {s:>{status_width}s}{task_info}")
 
@@ -889,9 +921,7 @@ def _cmd_next(args: argparse.Namespace) -> None:
                 hint = item.get("hint", f"markstate new {item['file']}")
                 print(f"  {item['file']:{file_width}s}  (not created)  → {hint}")
             else:
-                transitions = ", ".join(
-                    f"{t} (→ {transition_map[t]})" for t in item["transitions"]
-                )
+                transitions = ", ".join(f"{t} (→ {transition_map[t]})" for t in item["transitions"])
                 print(f"  {item['file']:{file_width}s}  {item['status']:15s}  → {transitions}")
 
 
@@ -1080,13 +1110,16 @@ def _cmd_audit(args: argparse.Namespace) -> None:
     entries.sort(key=lambda e: e.get("ts", ""))
     if args.days > 0:
         cutoff = datetime.now(UTC) - timedelta(days=args.days)
+
         def _parse_ts(s: str) -> datetime | None:
             try:
                 return datetime.fromisoformat(s.replace("Z", "+00:00"))
             except ValueError:
                 return None
-        entries = [e for e in entries
-                   if (ts := _parse_ts(e.get("ts", ""))) is not None and ts >= cutoff]
+
+        entries = [
+            e for e in entries if (ts := _parse_ts(e.get("ts", ""))) is not None and ts >= cutoff
+        ]
 
     if args.as_json:
         print(json.dumps(entries, indent=2, default=str))
@@ -1121,7 +1154,11 @@ def _git_age(path: Path) -> str | None:
     try:
         result = subprocess.run(
             ["git", "log", "-1", "--format=%cr  (%h)", "--", real.name],
-            cwd=real.parent, capture_output=True, text=True, timeout=2, check=False,
+            cwd=real.parent,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -1135,7 +1172,10 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
 
     start = _find_flow(Path.cwd())
     if start is None:
-        print(f"error: {CONFIG_FILENAME} not found (searched from {Path.cwd()} upward)", file=sys.stderr)
+        print(
+            f"error: {CONFIG_FILENAME} not found (searched from {Path.cwd()} upward)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     def _link_note(p: Path) -> str:
@@ -1193,7 +1233,9 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
             use_path = Path(use_raw).expanduser()
             if not use_path.is_absolute():
                 use_path = (path.parent / use_path).resolve()
-            chain_lines.append(f"    use: {use_raw} → {use_path}{_link_note(use_path)}{_age_suffix(use_path)}")
+            chain_lines.append(
+                f"    use: {use_raw} → {use_path}{_link_note(use_path)}{_age_suffix(use_path)}"
+            )
             if not use_path.exists():
                 problems.append(f"use target missing: {use_path} (from {path})")
         break
@@ -1247,9 +1289,7 @@ def _cmd_install_skills(args: argparse.Namespace) -> None:
         dest.mkdir(parents=True, exist_ok=True)
         for item in skill_dir.iterdir():
             if item.is_file():
-                (dest / item.name).write_text(
-                    item.read_text(encoding="utf-8"), encoding="utf-8"
-                )
+                (dest / item.name).write_text(item.read_text(encoding="utf-8"), encoding="utf-8")
                 print(f"installed {dest / item.name}")
 
 
@@ -1265,7 +1305,9 @@ def _cmd_check(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     print(f"  {result['file']}  [x] {result['task']}  ({result['done']}/{result['total']})")
-    _apply_frontmatter_edits(directory / result["file"], _parse_set_args(args.set), list(args.unset), config.status_field)
+    _apply_frontmatter_edits(
+        directory / result["file"], _parse_set_args(args.set), list(args.unset), config.status_field
+    )
 
     phase_after = engine.current_phase(config, directory)
     _report_transition(phase_before, phase_after, config, directory)
@@ -1297,11 +1339,10 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
         prog="markstate",
         description="Generic document flow processor.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version('markstate')}")
     parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {version('markstate')}"
-    )
-    parser.add_argument(
-        "--focus", metavar="DIR",
+        "--focus",
+        metavar="DIR",
         help="Override the active focus directory (also: MARKSTATE_FOCUS env var).",
     )
 
@@ -1309,10 +1350,18 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
 
     # init
     p = sub.add_parser("init", help="Create a flow.yml in the current directory.")
-    p.add_argument("source", nargs="?", default=None, metavar="SOURCE",
-                   help="Copy from an existing flow.yml (file or URL) instead of writing the built-in template.")
-    p.add_argument("--hidden", action="store_true",
-                   help="Write to .markstate/flow.yml instead of flow.yml. Only applies when no flow.yml exists upward from cwd.")
+    p.add_argument(
+        "source",
+        nargs="?",
+        default=None,
+        metavar="SOURCE",
+        help="Copy from an existing flow.yml (file or URL) instead of writing the built-in template.",
+    )
+    p.add_argument(
+        "--hidden",
+        action="store_true",
+        help="Write to .markstate/flow.yml instead of flow.yml. Only applies when no flow.yml exists upward from cwd.",
+    )
 
     # new
     p = sub.add_parser("new", help="Create a document from its template defined in flow.yml.")
@@ -1327,8 +1376,17 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("targets", metavar="FILE", nargs="+")
     _add_set_arg(p)
 
+    # update
+    p = sub.add_parser(
+        "update", help="Set arbitrary frontmatter fields on documents without touching status."
+    )
+    p.add_argument("targets", metavar="FILE", nargs="+")
+    _add_set_arg(p)
+
     # do
-    transition_metavar = "[" + "|".join(transition_names) + "]" if transition_names else "TRANSITION"
+    transition_metavar = (
+        "[" + "|".join(transition_names) + "]" if transition_names else "TRANSITION"
+    )
     p = sub.add_parser("do", help="Apply a named transition to a document.")
     p.add_argument("transition_name", metavar=transition_metavar)
     p.add_argument("target", metavar="FILE")
@@ -1376,15 +1434,23 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     # audit
     p = sub.add_parser("audit", help="Show merged transition audit log across users.")
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
-    p.add_argument("--days", type=float, default=1.0,
-                   help="Show entries from the last N days (default: 1, 0 for all)")
+    p.add_argument(
+        "--days",
+        type=float,
+        default=1.0,
+        help="Show entries from the last N days (default: 1, 0 for all)",
+    )
 
     # install-skills
     sub.add_parser("install-skills", help="Install markstate Claude skill to ~/.claude/skills/.")
 
     # doctor
-    p = sub.add_parser("doctor", help="Validate flow.yml chain and check for broken symlinks under docs_root.")
-    p.add_argument("--verbose", "-v", action="store_true", help="Show all symlinks, not just broken ones.")
+    p = sub.add_parser(
+        "doctor", help="Validate flow.yml chain and check for broken symlinks under docs_root."
+    )
+    p.add_argument(
+        "--verbose", "-v", action="store_true", help="Show all symlinks, not just broken ones."
+    )
 
     # query
     p = sub.add_parser(
@@ -1398,8 +1464,13 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
         help="One or more predicates: field=value, field!=value, field>value, field<value, field>=value, field<=value",
     )
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
-    p.add_argument("--dir", dest="directory", default=None, metavar="DIR",
-                   help="Root directory to search (default: docs_root or cwd)")
+    p.add_argument(
+        "--dir",
+        dest="directory",
+        default=None,
+        metavar="DIR",
+        help="Root directory to search (default: docs_root or cwd)",
+    )
 
     return parser
 
@@ -1430,6 +1501,7 @@ def main() -> None:
         "init": _cmd_init,
         "focus": _cmd_focus,
         "set": _cmd_set,
+        "update": _cmd_update,
         "new": _cmd_new,
         "do": _cmd_do,
         "status": _cmd_status,
