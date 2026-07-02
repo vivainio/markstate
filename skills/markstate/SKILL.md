@@ -9,37 +9,52 @@ and transitions based on those statuses and checkbox task completion.
 
 **Commands**
 
+- `markstate init [SOURCE] [--hidden]` — create a `flow.yml` in the current
+  directory, from the built-in template or by copying SOURCE (file or URL).
+  `--hidden` writes to `.markstate/flow.yml` instead.
+- `markstate new FILE [DIR]` — create a document from its template defined in
+  `flow.yml`.
+- `markstate set STATUS FILE... [--set KEY=VALUE ...] [--unset KEY ...]` — set
+  status directly without a defined transition. Works without `flow.yml`.
+- `markstate update FILE... [--set KEY=VALUE ...] [--unset KEY ...]` — set or
+  remove arbitrary frontmatter fields without touching status. Requires at
+  least one `--set`/`--unset`.
+- `markstate do TRANSITION FILE [--set KEY=VALUE ...]` — apply a named transition
+  to a document. Reports the status change and any phase change.
 - `markstate focus [QUERY]` — set or show the current working directory.
   If QUERY does not resolve to an existing path, searches `docs_root` recursively
   for a directory whose name contains it as a substring. Errors if ambiguous.
-- `markstate status [DIR]` — show current phase, document statuses, and task
-  counts. Add `--json` for machine-readable output.
-- `markstate next [DIR]` — list applicable transitions on existing documents and
-  documents that still need to be created.
+- `markstate which [QUERY]` — read-only counterpart to `focus`: resolves QUERY
+  the same way (or prints `docs_root` with no QUERY) without changing focus.
+- `markstate status [DIR] [--json]` — show current phase, document statuses, and
+  task counts. Add `--json` for machine-readable output.
+- `markstate viz [DIR]` — visualize status and progress with emoji and bars.
+- `markstate check-gate PHASE [DIR]` — verify a phase's gate conditions.
+  Exits 0 if satisfied, 1 otherwise.
+- `markstate transitions` — list all defined transitions.
+- `markstate next [DIR] [--json]` — list applicable transitions on existing
+  documents and documents that still need to be created.
 - `markstate next-task [DIR]` — show the first unchecked `- [ ]` task. When
   all tasks are done, reports the current phase and auto-creates any `auto: true`
   documents for the entered phase.
-- `markstate do TRANSITION FILE [--set KEY=VALUE ...]` — apply a named transition
-  to a document. Reports the status change and any phase change.
 - `markstate check TEXT [DIR]` — check off the first unchecked task whose text
   contains TEXT (case-insensitive). Reports `(N/M)` progress and fires a phase
   transition if it was the last task.
-- `markstate set STATUS FILE... [--set KEY=VALUE ...]` — set status directly without
-  a defined transition. Works without `flow.yml`.
-- `markstate new FILE [DIR]` — create a document from its template defined in
-  `flow.yml`.
+- `markstate list` — list directories that contain markdown documents.
+- `markstate audit [--json] [--days DAYS]` — show merged transition audit log
+  across users (default: last 1 day, `--days 0` for all).
+- `markstate doctor [--verbose]` — validate the `flow.yml` redirect chain and
+  check for broken symlinks under `docs_root`.
 - `markstate query PRED [PRED ...] [--json] [--dir DIR]` — find documents by
   front matter fields. Predicates are ANDed. Operators: `=` (exact), `!=`,
   `~=` (case-insensitive substring), `>`, `<`, `>=`, `<=` (numeric or string;
   ISO dates compare correctly). Searches from `docs_root` or cwd.
   Example: `markstate query status=draft "created-at>2024-06-01" title~=api`
-- `markstate check-gate PHASE [DIR]` — verify a phase's gate conditions.
-  Exits 0 if satisfied, 1 otherwise.
-- `markstate transitions` — list all defined transitions.
+- `markstate install-skills` — install this Claude skill to `~/.claude/skills/`.
 
-`new`, `set`, `do`, and `check` all accept `--set KEY=VALUE` (repeatable) to write
-extra frontmatter fields alongside the main operation. Magic values: `me` expands to
-the git user name, `now` to a UTC ISO 8601 timestamp.
+`new`, `set`, `update`, `do`, and `check` all accept `--set KEY=VALUE` (repeatable)
+to write extra frontmatter fields alongside the main operation. Magic values: `me`
+expands to the git user name, `now` to a UTC ISO 8601 timestamp.
 
 **Typical flow**
 
