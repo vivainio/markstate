@@ -1408,8 +1408,14 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p.add_argument("directory", nargs="?", default=None)
 
     # which
-    p = sub.add_parser("which", help="Resolve and print a directory's path without changing focus.")
-    p.add_argument("query", nargs="?", default=None)
+    p = sub.add_parser(
+        "which",
+        help=(
+            "Print docs_root, or resolve QUERY to a directory under docs_root "
+            "(same matching as focus) without changing focus."
+        ),
+    )
+    p.add_argument("query", nargs="?", default=None, metavar="QUERY")
 
     # status
     p = sub.add_parser("status", help="Show current phase and phase completion status.")
