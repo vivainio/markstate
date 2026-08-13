@@ -1,0 +1,6 @@
+# Inherit a canonical workflow shipped by an installed agent skill.
+# The project keeps only local overrides; upgrading the skill updates the flow.
+use: ~/.claude/skills/my-workflow/resources/flow.yml
+
+docs_root: project-docs
+
