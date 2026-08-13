@@ -39,36 +39,48 @@ def write_md(path: Path, status: str = "", body: str = "") -> None:
 
 
 def test_current_phase_initial(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("drafting", advance_when=[Condition(file="spec.md", status="approved")]),
-        Phase("done", gates=[Condition(file="spec.md", status="approved")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("drafting", advance_when=[Condition(file="spec.md", status="approved")]),
+            Phase("done", gates=[Condition(file="spec.md", status="approved")]),
+        ],
+    )
     assert engine.current_phase(cfg, tmp_path).name == "drafting"
 
 
 def test_current_phase_after_condition_met(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("drafting", advance_when=[Condition(file="spec.md", status="approved")]),
-        Phase("done", gates=[Condition(file="spec.md", status="approved")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("drafting", advance_when=[Condition(file="spec.md", status="approved")]),
+            Phase("done", gates=[Condition(file="spec.md", status="approved")]),
+        ],
+    )
     write_md(tmp_path / "spec.md", status="approved")
     # Terminal phase has no advance_when → _all_pass([]) = True → complete → None
     assert engine.current_phase(cfg, tmp_path) is None
 
 
 def test_current_phase_gate_blocks_entry(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("drafting", advance_when=[Condition(file="spec.md", status="approved")]),
-        Phase("review", gates=[Condition(file="spec.md", status="approved")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("drafting", advance_when=[Condition(file="spec.md", status="approved")]),
+            Phase("review", gates=[Condition(file="spec.md", status="approved")]),
+        ],
+    )
     # No spec.md — gate blocks review, advance_when not met — stays in drafting
     assert engine.current_phase(cfg, tmp_path).name == "drafting"
 
 
 def test_current_phase_none_when_complete(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("done", gates=[Condition(file="spec.md", status="approved")], advance_when=[]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("done", gates=[Condition(file="spec.md", status="approved")], advance_when=[]),
+        ],
+    )
     write_md(tmp_path / "spec.md", status="approved")
     # Only phase: gates pass, advance_when empty (always passes) → complete
     assert engine.current_phase(cfg, tmp_path) is None
@@ -79,13 +91,22 @@ def test_current_phase_none_when_complete(tmp_path):
 
 def test_current_phase_scope_filters_phases(tmp_path):
     """A directory under plans/ should only see phases scoped to plans/ (and unscoped)."""
-    cfg = make_config(tmp_path, [
-        Phase("drafting", scope="changes/",
-              advance_when=[Condition(file="proposal.md", status="accepted")]),
-        Phase("planning", scope="plans/",
-              advance_when=[Condition(file="plan.md", status="accepted")]),
-        Phase("done"),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase(
+                "drafting",
+                scope="changes/",
+                advance_when=[Condition(file="proposal.md", status="accepted")],
+            ),
+            Phase(
+                "planning",
+                scope="plans/",
+                advance_when=[Condition(file="plan.md", status="accepted")],
+            ),
+            Phase("done"),
+        ],
+    )
     plans_dir = tmp_path / "plans" / "migrate-db"
     plans_dir.mkdir(parents=True)
     # plans/migrate-db should be in "planning" phase, not "drafting"
@@ -94,26 +115,44 @@ def test_current_phase_scope_filters_phases(tmp_path):
 
 def test_current_phase_scope_changes_path(tmp_path):
     """A directory under changes/ should only see changes-scoped phases."""
-    cfg = make_config(tmp_path, [
-        Phase("drafting", scope="changes/",
-              advance_when=[Condition(file="proposal.md", status="accepted")]),
-        Phase("planning", scope="plans/",
-              advance_when=[Condition(file="plan.md", status="accepted")]),
-        Phase("done"),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase(
+                "drafting",
+                scope="changes/",
+                advance_when=[Condition(file="proposal.md", status="accepted")],
+            ),
+            Phase(
+                "planning",
+                scope="plans/",
+                advance_when=[Condition(file="plan.md", status="accepted")],
+            ),
+            Phase("done"),
+        ],
+    )
     changes_dir = tmp_path / "changes" / "auth" / "add-oauth"
     changes_dir.mkdir(parents=True)
     assert engine.current_phase(cfg, changes_dir).name == "drafting"
 
 
 def test_status_only_shows_scoped_phases(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("drafting", scope="changes/",
-              advance_when=[Condition(file="proposal.md", status="accepted")]),
-        Phase("planning", scope="plans/",
-              advance_when=[Condition(file="plan.md", status="accepted")]),
-        Phase("done"),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase(
+                "drafting",
+                scope="changes/",
+                advance_when=[Condition(file="proposal.md", status="accepted")],
+            ),
+            Phase(
+                "planning",
+                scope="plans/",
+                advance_when=[Condition(file="plan.md", status="accepted")],
+            ),
+            Phase("done"),
+        ],
+    )
     plans_dir = tmp_path / "plans" / "migrate-db"
     plans_dir.mkdir(parents=True)
     s = engine.status(cfg, plans_dir)
@@ -125,17 +164,23 @@ def test_status_only_shows_scoped_phases(tmp_path):
 
 
 def test_check_gate_all_met(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("review", gates=[Condition(file="spec.md", status="approved")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("review", gates=[Condition(file="spec.md", status="approved")]),
+        ],
+    )
     write_md(tmp_path / "spec.md", status="approved")
     assert engine.check_gate(cfg.phases[0], cfg, tmp_path) == []
 
 
 def test_check_gate_unmet(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("review", gates=[Condition(file="spec.md", status="approved")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("review", gates=[Condition(file="spec.md", status="approved")]),
+        ],
+    )
     write_md(tmp_path / "spec.md", status="draft")
     unmet = engine.check_gate(cfg.phases[0], cfg, tmp_path)
     assert len(unmet) == 1
@@ -172,10 +217,13 @@ def test_do_move_unknown(tmp_path):
 
 
 def test_evaluate_glob_all_status(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("review", advance_when=[Condition(glob="docs/*.md", all_status="reviewed")]),
-        Phase("done", gates=[Condition(glob="docs/*.md", all_status="reviewed")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("review", advance_when=[Condition(glob="docs/*.md", all_status="reviewed")]),
+            Phase("done", gates=[Condition(glob="docs/*.md", all_status="reviewed")]),
+        ],
+    )
     docs = tmp_path / "docs"
     docs.mkdir()
     write_md(docs / "a.md", status="reviewed")
@@ -187,9 +235,12 @@ def test_evaluate_glob_all_status(tmp_path):
 
 
 def test_evaluate_glob_empty_no_match(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("review", advance_when=[Condition(glob="docs/*.md", all_status="reviewed")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("review", advance_when=[Condition(glob="docs/*.md", all_status="reviewed")]),
+        ],
+    )
     # No files matching glob — condition fails
     assert engine.current_phase(cfg, tmp_path).name == "review"
 
@@ -198,10 +249,13 @@ def test_evaluate_glob_empty_no_match(tmp_path):
 
 
 def test_evaluate_file_tasks_all_done(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("coding", advance_when=[Condition(file="tasks.md", tasks="all_done")]),
-        Phase("done", gates=[Condition(file="tasks.md", tasks="all_done")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("coding", advance_when=[Condition(file="tasks.md", tasks="all_done")]),
+            Phase("done", gates=[Condition(file="tasks.md", tasks="all_done")]),
+        ],
+    )
     (tmp_path / "tasks.md").write_text("- [x] A\n- [ ] B\n")
     assert engine.current_phase(cfg, tmp_path).name == "coding"
 
@@ -210,26 +264,35 @@ def test_evaluate_file_tasks_all_done(tmp_path):
 
 
 def test_evaluate_file_tasks_missing_file(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("coding", advance_when=[Condition(file="tasks.md", tasks="all_done")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("coding", advance_when=[Condition(file="tasks.md", tasks="all_done")]),
+        ],
+    )
     assert engine.current_phase(cfg, tmp_path).name == "coding"
 
 
 def test_evaluate_file_tasks_empty_file(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("coding", advance_when=[Condition(file="tasks.md", tasks="all_done")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("coding", advance_when=[Condition(file="tasks.md", tasks="all_done")]),
+        ],
+    )
     (tmp_path / "tasks.md").write_text("# No checkboxes\n")
     # total == 0 → condition fails
     assert engine.current_phase(cfg, tmp_path).name == "coding"
 
 
 def test_evaluate_glob_tasks_all_done(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("coding", advance_when=[Condition(glob="*/tasks.md", tasks="all_done")]),
-        Phase("done", gates=[Condition(glob="*/tasks.md", tasks="all_done")]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("coding", advance_when=[Condition(glob="*/tasks.md", tasks="all_done")]),
+            Phase("done", gates=[Condition(glob="*/tasks.md", tasks="all_done")]),
+        ],
+    )
     (tmp_path / "s1").mkdir()
     (tmp_path / "s2").mkdir()
     (tmp_path / "s1" / "tasks.md").write_text("- [x] Done\n")
@@ -244,11 +307,12 @@ def test_evaluate_glob_tasks_all_done(tmp_path):
 
 
 def test_find_dir_template_match(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("review", produces=[
-            ProducedDir("specs/*", files=[ProducedDoc("spec.md")])
-        ]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("review", produces=[ProducedDir("specs/*", files=[ProducedDoc("spec.md")])]),
+        ],
+    )
     spec_dir = tmp_path / "specs" / "01-auth"
     spec_dir.mkdir(parents=True)
     task_dir, entry = engine.find_dir_template(cfg, spec_dir)
@@ -263,9 +327,12 @@ def test_find_dir_template_outside_docs_root(tmp_path):
 
 
 def test_find_dir_template_no_match(tmp_path):
-    cfg = make_config(tmp_path, [
-        Phase("review", produces=[ProducedDir("specs/*", files=[])]),
-    ])
+    cfg = make_config(
+        tmp_path,
+        [
+            Phase("review", produces=[ProducedDir("specs/*", files=[])]),
+        ],
+    )
     other_dir = tmp_path / "other" / "thing"
     other_dir.mkdir(parents=True)
     assert engine.find_dir_template(cfg, other_dir) == (None, None)
@@ -470,7 +537,9 @@ def test_do_transition_require_set_rejects_when_missing(tmp_path):
         [],
         transitions=[
             Transition(
-                "block", "draft", "blocked",
+                "block",
+                "draft",
+                "blocked",
                 set_fields={"blocked-at": "now"},
                 require_set=["blocked-reason"],
             ),
@@ -490,7 +559,9 @@ def test_do_transition_require_set_passes_when_provided(tmp_path):
         [],
         transitions=[
             Transition(
-                "block", "draft", "blocked",
+                "block",
+                "draft",
+                "blocked",
                 set_fields={"blocked-at": "now"},
                 require_set=["blocked-reason"],
             ),
@@ -508,7 +579,9 @@ def test_do_transition_gates_block_when_sibling_unmet(tmp_path):
         [],
         transitions=[
             Transition(
-                "close", "accepted", "closed",
+                "close",
+                "accepted",
+                "closed",
                 gates=[Condition(file="recap.md", status=["accepted", "done", "closed"])],
             ),
         ],
@@ -526,7 +599,9 @@ def test_do_transition_gates_pass_when_sibling_met(tmp_path):
         [],
         transitions=[
             Transition(
-                "close", "accepted", "closed",
+                "close",
+                "accepted",
+                "closed",
                 gates=[Condition(file="recap.md", status=["accepted", "done", "closed"])],
             ),
         ],
@@ -590,7 +665,9 @@ def test_do_transition_once_field_preserved_on_reapply(tmp_path):
         tmp_path,
         [],
         transitions=[
-            Transition("accept", "draft", "accepted", set_fields={"once-first-accepted-at": "today"}),
+            Transition(
+                "accept", "draft", "accepted", set_fields={"once-first-accepted-at": "today"}
+            ),
             Transition("reopen", "accepted", "draft"),
         ],
     )
@@ -618,10 +695,13 @@ def test_hook_can_stamp_frontmatter(tmp_path):
         [],
         transitions=[Transition("accept", "draft", "accepted")],
     )
-    _write_hooks(tmp_path, """
+    _write_hooks(
+        tmp_path,
+        """
 def on_transition(ctx):
     ctx.frontmatter["stamped-by-hook"] = f"{ctx.from_state}->{ctx.to_state}"
-""")
+""",
+    )
     write_md(tmp_path / "spec.md", status="draft")
     engine.do_transition("accept", tmp_path / "spec.md", cfg)
     doc = engine.frontmatter.load(tmp_path / "spec.md")
@@ -635,11 +715,14 @@ def test_hook_abort_vetoes_transition(tmp_path):
         [],
         transitions=[Transition("accept", "draft", "accepted")],
     )
-    _write_hooks(tmp_path, """
+    _write_hooks(
+        tmp_path,
+        """
 from markstate import HookAbort, TransitionContext
 def on_transition(ctx: TransitionContext):
     raise HookAbort("approver required")
-""")
+""",
+    )
     spec = tmp_path / "spec.md"
     write_md(spec, status="draft")
     with pytest.raises(engine.HookAbort, match="approver required"):
@@ -665,10 +748,13 @@ def test_hook_bug_propagates_traceback(tmp_path):
         [],
         transitions=[Transition("accept", "draft", "accepted")],
     )
-    _write_hooks(tmp_path, """
+    _write_hooks(
+        tmp_path,
+        """
 def on_transition(ctx):
     raise KeyError("typo")
-""")
+""",
+    )
     spec = tmp_path / "spec.md"
     write_md(spec, status="draft")
     # Non-HookAbort exceptions propagate as-is, not wrapped
@@ -683,11 +769,7 @@ def _write_use_pair(tmp_path: Path) -> tuple[Path, Path]:
     shared.mkdir()
     project.mkdir()
     (shared / "flow.yml").write_text(
-        "phases: []\n"
-        "transitions:\n"
-        "  - name: accept\n"
-        "    from: draft\n"
-        "    to: accepted\n"
+        "phases: []\ntransitions:\n  - name: accept\n    from: draft\n    to: accepted\n"
     )
     (project / "flow.yml").write_text(f"use: {shared / 'flow.yml'}\n")
     return project, shared

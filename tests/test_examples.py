@@ -54,7 +54,9 @@ def test_sdd_full_workflow(tmp_path):
     result = run(["do", "accept", "spec.md"], change)
     assert result.returncode == 0
     assert "accepted" in result.stdout
-    assert (change / "tasks.md").exists(), "tasks.md should be auto-created on entering implementing"
+    assert (change / "tasks.md").exists(), (
+        "tasks.md should be auto-created on entering implementing"
+    )
 
     # --- implementing phase ---
     result = run(["status"], change)
@@ -163,7 +165,9 @@ def test_openspec_full_workflow(tmp_path):
     assert result.returncode == 0
 
     # tasks.md should have been auto-created when gate became satisfied
-    assert (change / "tasks.md").exists(), "tasks.md should be auto-created on entering implementing"
+    assert (change / "tasks.md").exists(), (
+        "tasks.md should be auto-created on entering implementing"
+    )
 
     # --- implementing phase ---
     result = run(["status"], change)

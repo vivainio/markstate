@@ -14,7 +14,5 @@ def on_transition(ctx: TransitionContext):
     if ctx.to_state == "accepted":
         # Honor an opt-in veto flag for testing the abort path.
         if ctx.frontmatter.get("block-accept"):
-            raise HookAbort(
-                f"{ctx.doc_path.name}: cannot accept while 'block-accept' is set"
-            )
+            raise HookAbort(f"{ctx.doc_path.name}: cannot accept while 'block-accept' is set")
         ctx.frontmatter["accepted-via-hook"] = True

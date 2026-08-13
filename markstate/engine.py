@@ -25,6 +25,7 @@ class TransitionContext:
     frontmatter is the live dict; mutations are persisted when the
     transition commits. Raise HookAbort from the hook to veto.
     """
+
     doc_path: Path
     frontmatter: dict
     transition: str
@@ -39,6 +40,7 @@ class TransitionError(Exception):
 
 class HookAbort(TransitionError):
     """Raise from a flow_hooks.py hook to cleanly veto a transition."""
+
     pass
 
 
@@ -56,21 +58,19 @@ def resolve_magic(value: str) -> str | date | datetime:
         if override:
             return override
         try:
-            result = subprocess.run(
-                ["git", "config", "user.name"], capture_output=True, text=True
-            )
+            result = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True)
         except FileNotFoundError:
             raise TransitionError(
                 "Cannot resolve 'me': git not found on PATH. "
-                "Set MARKSTATE_ME=\"Your Name\" or install git."
+                'Set MARKSTATE_ME="Your Name" or install git.'
             )
         name = result.stdout.strip()
         if result.returncode != 0 or not name:
             detail = result.stderr.strip() or "git user.name is not set"
             raise TransitionError(
                 f"Cannot resolve 'me': {detail}. "
-                "Set MARKSTATE_ME=\"Your Name\" or run "
-                "`git config --global user.name \"Your Name\"`."
+                'Set MARKSTATE_ME="Your Name" or run '
+                '`git config --global user.name "Your Name"`.'
             )
         return name
     if value == "now":
@@ -90,7 +90,7 @@ def apply_fields(doc: frontmatter.Document, fields: dict[str, str]) -> None:
     for key, value in fields.items():
         resolved = resolve_magic(str(value))
         if key.startswith(_ONCE_PREFIX):
-            actual = key[len(_ONCE_PREFIX):]
+            actual = key[len(_ONCE_PREFIX) :]
             if doc.get(actual) is None:
                 doc.set(actual, resolved)
         else:
@@ -149,16 +149,12 @@ def do_transition(
     missing = check_require_set(t, provided_keys or set())
     if missing:
         flags = " ".join(f"--set {k}=<value>" for k in missing)
-        raise TransitionError(
-            f"transition '{transition_name}' requires {flags}"
-        )
+        raise TransitionError(f"transition '{transition_name}' requires {flags}")
 
     if t.gates:
         unmet = [describe_condition(c) for c in t.gates if not _evaluate(c, config, target.parent)]
         if unmet:
-            raise TransitionError(
-                f"transition '{transition_name}' blocked: " + "; ".join(unmet)
-            )
+            raise TransitionError(f"transition '{transition_name}' blocked: " + "; ".join(unmet))
 
     doc = frontmatter.load(target)
     doc.first_keys = (config.status_field,)
@@ -176,21 +172,25 @@ def do_transition(
 
     hook = config.load_hook("on_transition")
     if hook is not None:
-        hook(TransitionContext(
-            doc_path=target,
-            frontmatter=doc.front_matter,
-            transition=transition_name,
-            from_state=current,
-            to_state=t.to_state,
-            config=config,
-        ))
+        hook(
+            TransitionContext(
+                doc_path=target,
+                frontmatter=doc.front_matter,
+                transition=transition_name,
+                from_state=current,
+                to_state=t.to_state,
+                config=config,
+            )
+        )
 
     doc.save()
     return current, t.to_state
 
 
-def find_dir_template(config: FlowConfig, cwd: Path) -> tuple[Path, ProducedDir] | tuple[None, None]:
-    """Find the dir template matching cwd by comparing its path relative to docs_root against all dir patterns."""
+def find_dir_template(
+    config: FlowConfig, cwd: Path
+) -> tuple[Path, ProducedDir] | tuple[None, None]:
+    """Find the dir template matching cwd to patterns relative to docs_root."""
     if not cwd.is_relative_to(config.docs_root):
         return None, None
     rel = cwd.relative_to(config.docs_root)
@@ -224,7 +224,7 @@ def collect_dir_files(config: FlowConfig, dir_pattern: str) -> list[ProducedDoc]
 
 
 def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
-    """Return actionable next steps: applicable transitions on existing docs, and missing produced docs."""
+    """Return applicable transitions and missing produced documents."""
     results = []
 
     for path in filtered_rglob(directory, "*.md", config.exclude_dirs):
@@ -234,12 +234,14 @@ def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, obje
             continue
         applicable = [t.name for t in config.transitions if t.from_state == current]
         if applicable:
-            results.append({
-                "file": str(path.relative_to(directory)),
-                "status": current,
-                "transitions": applicable,
-                "missing": False,
-            })
+            results.append(
+                {
+                    "file": str(path.relative_to(directory)),
+                    "status": current,
+                    "transitions": applicable,
+                    "missing": False,
+                }
+            )
 
     # Show missing files from the current dir template (if inside one)
     _, dir_entry = find_dir_template(config, directory)
@@ -247,12 +249,14 @@ def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, obje
         all_files = collect_dir_files(config, dir_entry.dir)
         for f in all_files:
             if not (directory / f.file).exists():
-                results.append({
-                    "file": f.file,
-                    "status": None,
-                    "transitions": [],
-                    "missing": True,
-                })
+                results.append(
+                    {
+                        "file": f.file,
+                        "status": None,
+                        "transitions": [],
+                        "missing": True,
+                    }
+                )
 
     # Show missing produced docs/dirs from the current phase
     phase = current_phase(config, directory)
@@ -260,23 +264,29 @@ def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, obje
         for entry in phase.produces:
             if isinstance(entry, ProducedDoc) and not dir_entry:
                 if not (directory / entry.file).exists():
-                    results.append({
-                        "file": entry.file,
-                        "status": None,
-                        "transitions": [],
-                        "missing": True,
-                    })
-            elif isinstance(entry, ProducedDir) and entry.dir != (dir_entry.dir if dir_entry else None):
+                    results.append(
+                        {
+                            "file": entry.file,
+                            "status": None,
+                            "transitions": [],
+                            "missing": True,
+                        }
+                    )
+            elif isinstance(entry, ProducedDir) and entry.dir != (
+                dir_entry.dir if dir_entry else None
+            ):
                 existing = list(config.docs_root.glob(entry.glob_pattern))
                 under_dir = [d for d in existing if d.is_dir() and d.is_relative_to(directory)]
                 if not under_dir:
-                    results.append({
-                        "file": entry.dir,
-                        "status": None,
-                        "transitions": [],
-                        "missing": True,
-                        "hint": f"markstate new {entry.dir}",
-                    })
+                    results.append(
+                        {
+                            "file": entry.dir,
+                            "status": None,
+                            "transitions": [],
+                            "missing": True,
+                            "hint": f"markstate new {entry.dir}",
+                        }
+                    )
 
     return results
 
@@ -328,7 +338,9 @@ def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool
         if not paths:
             return False
         return all(
-            _status_matches(str(frontmatter.load(p).get(config.status_field) or ""), condition.all_status)
+            _status_matches(
+                str(frontmatter.load(p).get(config.status_field) or ""), condition.all_status
+            )
             for p in paths
         )
 
@@ -342,7 +354,9 @@ def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool
         paths = list(directory.glob(condition.glob))
         if not paths:
             return False
-        return all(_tasks_all_done(*frontmatter.count_tasks(p.read_text(encoding="utf-8"))) for p in paths)
+        return all(
+            _tasks_all_done(*frontmatter.count_tasks(p.read_text(encoding="utf-8"))) for p in paths
+        )
 
     return False
 
@@ -396,7 +410,8 @@ def describe_condition(condition: Condition) -> str:
     if condition.file and condition.status:
         return f"{condition.file} must have status {_describe_status(condition.status)}"
     if condition.glob and condition.all_status:
-        return f"all files matching '{condition.glob}' must have status {_describe_status(condition.all_status)}"
+        expected = _describe_status(condition.all_status)
+        return f"all files matching '{condition.glob}' must have status {expected}"
     if condition.file and condition.tasks:
         return f"all tasks in {condition.file} must be done"
     if condition.glob and condition.tasks:

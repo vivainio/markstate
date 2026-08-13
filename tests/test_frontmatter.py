@@ -1,6 +1,5 @@
 """Tests for frontmatter parsing and checkbox utilities."""
 
-
 from markstate.frontmatter import (
     _parse,
     _serialize,
@@ -50,7 +49,7 @@ def test_serialize_status_first():
 def test_serialize_first_keys_preserves_rest_order():
     fm = {"zebra": "z", "alpha": "a", "status": "done"}
     text = _serialize(fm, "", first_keys=("status",))
-    lines = [l for l in text.split("\n") if ": " in l]
+    lines = [line for line in text.split("\n") if ": " in line]
     assert lines[0] == "status: done"
     # Rest should be in original insertion order, not alphabetical
     assert lines[1] == "zebra: z"
@@ -167,13 +166,7 @@ def test_check_task_first_match_only():
 # --- HTML comment stripping ---
 
 COMMENT_BODY = (
-    "<!-- Example:\n"
-    "- [ ] ignored 1\n"
-    "- [ ] ignored 2\n"
-    "- [ ] ignored 3\n"
-    "-->\n"
-    "\n"
-    "- [x] real task\n"
+    "<!-- Example:\n- [ ] ignored 1\n- [ ] ignored 2\n- [ ] ignored 3\n-->\n\n- [x] real task\n"
 )
 
 
