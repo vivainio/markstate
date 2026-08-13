@@ -36,6 +36,11 @@ and transitions based on those statuses and checkbox task completion.
 - `markstate check-gate PHASE [DIR]` — verify a phase's gate conditions.
   Exits 0 if satisfied, 1 otherwise.
 - `markstate transitions` — list all defined transitions.
+- `markstate validate [FILE]` — validate a flow file against Markstate's bundled
+  JSON Schema.
+
+Agents with JSON Schema tooling may also validate `flow.yml` directly against
+`https://vivainio.github.io/markstate/schema/v1/flow.schema.json`.
 
 `new`, `set`, `do`, and `check` all accept `--set KEY=VALUE` (repeatable) to write
 extra frontmatter fields alongside the main operation. Magic values: `me` expands to

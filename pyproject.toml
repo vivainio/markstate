@@ -14,7 +14,7 @@ markstate = "markstate.cli:main"
 include = ["markstate*"]
 
 [tool.setuptools.package-data]
-markstate = ["skills/**/*"]
+markstate = ["schema/**/*.json", "skills/**/*"]
 
 [tool.uv]
 package = true

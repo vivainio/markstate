@@ -30,6 +30,7 @@ from markstate.config import (
 )
 from markstate.config import _find as _find_flow
 from markstate.engine import TaskNotFoundError, TransitionError
+from markstate.schema import SCHEMA_VERSION, discover_flow_chain, find_flow_path, validate_flow
 
 FOCUS_FILE = ".markstate-focus"
 FOCUS_ENV_VAR = "MARKSTATE_FOCUS"
@@ -1316,6 +1317,28 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
     print("ok")
 
 
+def _cmd_validate(args: argparse.Namespace) -> None:
+    """Validate a flow document against the current bundled schema."""
+    try:
+        path = Path(args.file).expanduser() if args.file else find_flow_path()
+        path = path.resolve()
+        if not path.is_file():
+            raise FileNotFoundError(path)
+    except FileNotFoundError as error:
+        print(f"error: flow file not found: {error}", file=sys.stderr)
+        sys.exit(1)
+
+    paths, errors = discover_flow_chain(path, _variable_overrides)
+    for flow_path in paths:
+        errors.extend(f"{flow_path}: {error}" for error in validate_flow(flow_path))
+    if errors:
+        print(f"{path}: invalid ({SCHEMA_VERSION})", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        sys.exit(1)
+    print(f"{path}: valid ({SCHEMA_VERSION}); {len(paths)} flow file(s)")
+
+
 def _cmd_install_skills(args: argparse.Namespace) -> None:
     target_root = Path.home() / ".claude" / "skills"
     source_root = pkg_files("markstate").joinpath("skills")
@@ -1512,6 +1535,10 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
         "--verbose", "-v", action="store_true", help="Show all symlinks, not just broken ones."
     )
 
+    # validate
+    p = sub.add_parser("validate", help="Validate a flow file against the current schema.")
+    p.add_argument("file", nargs="?", default=None, metavar="FILE")
+
     # query
     p = sub.add_parser(
         "query",
@@ -1552,12 +1579,12 @@ def main() -> None:
         print(f"error: {error}", file=sys.stderr)
         sys.exit(2)
 
-    # doctor needs to run even when flow.yml is broken — skip the eager load.
-    is_doctor = "doctor" in sys.argv[1:]
+    # Diagnostic commands need to run even when flow.yml is broken.
+    is_diagnostic = any(command in sys.argv[1:] for command in ("doctor", "validate"))
     try:
-        config = None if is_doctor else _try_load_config()
+        config = None if is_diagnostic else _try_load_config()
     except SystemExit:
-        if not is_doctor:
+        if not is_diagnostic:
             raise
         config = None
     parser = _build_parser(config)
@@ -1592,5 +1619,6 @@ def main() -> None:
         "audit": _cmd_audit,
         "install-skills": _cmd_install_skills,
         "doctor": _cmd_doctor,
+        "validate": _cmd_validate,
     }
     dispatch[args.command](args)

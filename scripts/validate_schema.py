@@ -7,11 +7,14 @@ import yaml
 from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "docs" / "schema" / "v1" / "flow.schema.json"
+SCHEMA_PATH = ROOT / "markstate" / "schema" / "v1" / "flow.schema.json"
+PUBLISHED_SCHEMA_PATH = ROOT / "docs" / "schema" / "v1" / "flow.schema.json"
 
 
 def main() -> None:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    if SCHEMA_PATH.read_bytes() != PUBLISHED_SCHEMA_PATH.read_bytes():
+        raise SystemExit("bundled and published v1 schemas differ")
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema)
 

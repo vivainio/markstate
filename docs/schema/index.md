@@ -37,5 +37,6 @@ resolution (`use` and `redirect`) and relationships between `$variables` and
 `$select` cases are validated by Markstate itself:
 
 ```bash
+markstate validate
 markstate doctor
 ```

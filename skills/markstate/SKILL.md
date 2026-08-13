@@ -45,6 +45,11 @@ and transitions based on those statuses and checkbox task completion.
   across users (default: last 1 day, `--days 0` for all).
 - `markstate doctor [--verbose]` — validate the `flow.yml` redirect chain and
   check for broken symlinks under `docs_root`.
+- `markstate validate [FILE]` — validate a flow file against Markstate's bundled
+  JSON Schema.
+
+Agents with JSON Schema tooling may also validate `flow.yml` directly against
+`https://vivainio.github.io/markstate/schema/v1/flow.schema.json`.
 - `markstate query PRED [PRED ...] [--json] [--dir DIR]` — find documents by
   front matter fields. Predicates are ANDed. Operators: `=` (exact), `!=`,
   `~=` (case-insensitive substring), `>`, `<`, `>=`, `<=` (numeric or string;

@@ -9,12 +9,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
-def run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
+def run(
+    args: list[str], cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-m", "markstate", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -75,6 +78,83 @@ transitions: []
 
 def setup_flow(tmp_path: Path, content: str = SIMPLE_FLOW) -> None:
     (tmp_path / "flow.yml").write_text(content)
+
+
+def validation_env(tmp_path: Path) -> dict[str, str]:
+    """Provide a deterministic stand-in for uv's isolated validator."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uv = bin_dir / "uv"
+    uv.write_text(
+        """#!/usr/bin/env python3
+import json
+import sys
+
+document = json.load(open(sys.argv[-1]))
+errors = []
+phases = document.get("phases")
+if not isinstance(phases, list):
+    errors.append("phases: value is not valid under any of the given schemas")
+elif phases and "name" not in phases[0]:
+    errors.append("phases.0: 'name' is a required property")
+print(json.dumps(errors))
+"""
+    )
+    uv.chmod(0o755)
+    return os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+
+def test_validate_discovers_valid_flow(tmp_path: Path) -> None:
+    setup_flow(tmp_path)
+
+    result = run(["validate"], tmp_path, validation_env(tmp_path))
+
+    assert result.returncode == 0
+    assert "flow.yml: valid (v1)" in result.stdout
+
+
+def test_validate_reports_schema_errors(tmp_path: Path) -> None:
+    path = tmp_path / "broken.yml"
+    path.write_text("phases:\n  - description: Missing name\n")
+
+    result = run(["validate", str(path)], tmp_path, validation_env(tmp_path))
+
+    assert result.returncode == 1
+    assert "broken.yml: invalid (v1)" in result.stderr
+    assert "phases.0" in result.stderr
+
+
+def test_validate_runs_before_eager_config_loading(tmp_path: Path) -> None:
+    setup_flow(tmp_path, "phases: not-a-list\n")
+
+    result = run(["validate"], tmp_path, validation_env(tmp_path))
+
+    assert result.returncode == 1
+    assert "invalid (v1)" in result.stderr
+
+
+def test_validate_recursively_checks_every_used_flow(tmp_path: Path) -> None:
+    project = tmp_path / "flow.yml"
+    team = tmp_path / "team.yml"
+    base = tmp_path / "base.yml"
+    project.write_text("use: team.yml\ndocs_root: docs\n")
+    team.write_text("use: base.yml\nstatus_field: state\n")
+    base.write_text("phases:\n  - description: Missing name\n")
+
+    result = run(["validate"], tmp_path, validation_env(tmp_path))
+
+    assert result.returncode == 1
+    assert f"{base}: phases.0" in result.stderr
+
+
+def test_validate_reports_use_cycle(tmp_path: Path) -> None:
+    (tmp_path / "flow.yml").write_text("use: shared.yml\n")
+    (tmp_path / "shared.yml").write_text("use: flow.yml\n")
+
+    result = run(["validate"], tmp_path, validation_env(tmp_path))
+
+    assert result.returncode == 1
+    assert "reference cycle" in result.stderr
 
 
 # --- status ---

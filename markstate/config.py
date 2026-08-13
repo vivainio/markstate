@@ -33,6 +33,14 @@ def _resolve_relative(flow_path: Path, rel: str) -> Path:
     return (anchor / rel).resolve()
 
 
+def resolve_flow_reference(flow_path: Path, reference: str) -> Path:
+    """Resolve a path referenced by a flow file, including ``~`` paths."""
+    expanded = Path(reference).expanduser()
+    if expanded.is_absolute():
+        return expanded.resolve()
+    return _resolve_relative(flow_path, reference)
+
+
 def _main_worktree_anchor(parent: Path) -> Path | None:
     """If ``parent`` is inside a linked git worktree, return the equivalent
     directory under the main working tree; otherwise None."""
