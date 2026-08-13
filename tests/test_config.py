@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from markstate.config import FlowConfigError, ProducedDir, find_and_load, find_flow_target
+from markstate.config import (
+    FlowConfigError,
+    ProducedDir,
+    ProducedDoc,
+    find_and_load,
+    find_flow_target,
+)
 
 
 def write_flow(tmp_path: Path, content: str) -> Path:
@@ -355,6 +361,7 @@ transitions: []
     assert drafting.advance_when[0].status == "approved"
 
     done = cfg.phase("done")
+    assert done is not None
     assert len(done.gates) == 1
 
 
@@ -411,6 +418,7 @@ transitions:
     cfg = find_and_load(tmp_path)
     assert cfg.transition_names() == ["approve", "reject"]
     approve = cfg.transition("approve")
+    assert approve is not None
     assert approve.from_state == "draft"
     assert approve.to_state == "approved"
 
@@ -430,8 +438,10 @@ transitions: []
     )
     cfg = find_and_load(tmp_path)
     doc = cfg.phases[0].produces[0]
+    assert isinstance(doc, ProducedDoc)
     assert doc.file == "spec.md"
     assert doc.auto is True
+    assert doc.template is not None
     assert "status: draft" in doc.template
 
 
@@ -535,6 +545,7 @@ transitions:
     )
     cfg = find_and_load(tmp_path)
     t = cfg.transition("accept")
+    assert t is not None
     assert t.set_fields == {
         "accepted-at": "now",
         "accepted-by": "me",
@@ -560,6 +571,7 @@ transitions:
     )
     cfg = find_and_load(tmp_path)
     t = cfg.transition("unblock")
+    assert t is not None
     assert t.set_fields == {"unblocked-at": "now"}
     assert t.unset_fields == ["blocked-at", "blocked-reason"]
 
@@ -581,6 +593,7 @@ transitions:
     )
     cfg = find_and_load(tmp_path)
     t = cfg.transition("block")
+    assert t is not None
     assert t.require_set == ["blocked-reason"]
 
 
@@ -597,6 +610,7 @@ transitions:
     )
     cfg = find_and_load(tmp_path)
     t = cfg.transition("accept")
+    assert t is not None
     assert t.require_set == []
 
 
@@ -616,6 +630,7 @@ transitions: []
     )
     cfg = find_and_load(tmp_path)
     entry = cfg.phases[0].produces[0]
+    assert isinstance(entry, ProducedDoc)
     assert entry.unset_fields == ["stale"]
 
 
@@ -636,6 +651,7 @@ transitions: []
     )
     cfg = find_and_load(tmp_path)
     entry = cfg.phases[0].produces[0]
+    assert isinstance(entry, ProducedDoc)
     assert entry.set_fields == {"created-at": "now", "author": "me"}
 
 
@@ -657,6 +673,7 @@ transitions: []
     )
     cfg = find_and_load(tmp_path)
     entry = cfg.phases[0].produces[0]
+    assert isinstance(entry, ProducedDir)
     assert entry.files[0].set_fields == {"created-at": "today"}
 
 

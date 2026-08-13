@@ -30,7 +30,7 @@ def test_parse_multiple_fields():
 
 
 def test_serialize_round_trip():
-    fm = {"status": "draft", "title": "Test"}
+    fm: dict[str, object] = {"status": "draft", "title": "Test"}
     body = "# Hello\n"
     text = _serialize(fm, body)
     fm2, body2 = _parse(text)
@@ -39,7 +39,7 @@ def test_serialize_round_trip():
 
 
 def test_serialize_status_first():
-    fm = {"title": "Test", "author": "me", "status": "draft"}
+    fm: dict[str, object] = {"title": "Test", "author": "me", "status": "draft"}
     text = _serialize(fm, "# Hello\n", first_keys=("status",))
     lines = text.split("\n")
     # First line after opening --- should be status
@@ -47,7 +47,7 @@ def test_serialize_status_first():
 
 
 def test_serialize_first_keys_preserves_rest_order():
-    fm = {"zebra": "z", "alpha": "a", "status": "done"}
+    fm: dict[str, object] = {"zebra": "z", "alpha": "a", "status": "done"}
     text = _serialize(fm, "", first_keys=("status",))
     lines = [line for line in text.split("\n") if ": " in line]
     assert lines[0] == "status: done"
@@ -58,7 +58,7 @@ def test_serialize_first_keys_preserves_rest_order():
 
 def test_serialize_first_keys_missing_key():
     """first_keys that aren't in the dict are silently skipped."""
-    fm = {"title": "Test"}
+    fm: dict[str, object] = {"title": "Test"}
     text = _serialize(fm, "", first_keys=("status",))
     assert "title: Test" in text
     assert "status" not in text

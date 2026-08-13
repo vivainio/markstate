@@ -35,6 +35,12 @@ def write_md(path: Path, status: str = "", body: str = "") -> None:
         path.write_text(body)
 
 
+def current_phase_name(cfg: FlowConfig, directory: Path) -> str:
+    phase = engine.current_phase(cfg, directory)
+    assert phase is not None
+    return phase.name
+
+
 # --- current_phase ---
 
 
@@ -46,7 +52,7 @@ def test_current_phase_initial(tmp_path):
             Phase("done", gates=[Condition(file="spec.md", status="approved")]),
         ],
     )
-    assert engine.current_phase(cfg, tmp_path).name == "drafting"
+    assert current_phase_name(cfg, tmp_path) == "drafting"
 
 
 def test_current_phase_after_condition_met(tmp_path):
@@ -71,7 +77,7 @@ def test_current_phase_gate_blocks_entry(tmp_path):
         ],
     )
     # No spec.md — gate blocks review, advance_when not met — stays in drafting
-    assert engine.current_phase(cfg, tmp_path).name == "drafting"
+    assert current_phase_name(cfg, tmp_path) == "drafting"
 
 
 def test_current_phase_none_when_complete(tmp_path):
@@ -110,7 +116,7 @@ def test_current_phase_scope_filters_phases(tmp_path):
     plans_dir = tmp_path / "plans" / "migrate-db"
     plans_dir.mkdir(parents=True)
     # plans/migrate-db should be in "planning" phase, not "drafting"
-    assert engine.current_phase(cfg, plans_dir).name == "planning"
+    assert current_phase_name(cfg, plans_dir) == "planning"
 
 
 def test_current_phase_scope_changes_path(tmp_path):
@@ -133,7 +139,7 @@ def test_current_phase_scope_changes_path(tmp_path):
     )
     changes_dir = tmp_path / "changes" / "auth" / "add-oauth"
     changes_dir.mkdir(parents=True)
-    assert engine.current_phase(cfg, changes_dir).name == "drafting"
+    assert current_phase_name(cfg, changes_dir) == "drafting"
 
 
 def test_status_only_shows_scoped_phases(tmp_path):
@@ -228,7 +234,7 @@ def test_evaluate_glob_all_status(tmp_path):
     docs.mkdir()
     write_md(docs / "a.md", status="reviewed")
     write_md(docs / "b.md", status="draft")
-    assert engine.current_phase(cfg, tmp_path).name == "review"
+    assert current_phase_name(cfg, tmp_path) == "review"
 
     write_md(docs / "b.md", status="reviewed")
     assert engine.current_phase(cfg, tmp_path) is None
@@ -242,7 +248,7 @@ def test_evaluate_glob_empty_no_match(tmp_path):
         ],
     )
     # No files matching glob — condition fails
-    assert engine.current_phase(cfg, tmp_path).name == "review"
+    assert current_phase_name(cfg, tmp_path) == "review"
 
 
 # --- _evaluate: tasks conditions ---
@@ -257,7 +263,7 @@ def test_evaluate_file_tasks_all_done(tmp_path):
         ],
     )
     (tmp_path / "tasks.md").write_text("- [x] A\n- [ ] B\n")
-    assert engine.current_phase(cfg, tmp_path).name == "coding"
+    assert current_phase_name(cfg, tmp_path) == "coding"
 
     (tmp_path / "tasks.md").write_text("- [x] A\n- [x] B\n")
     assert engine.current_phase(cfg, tmp_path) is None
@@ -270,7 +276,7 @@ def test_evaluate_file_tasks_missing_file(tmp_path):
             Phase("coding", advance_when=[Condition(file="tasks.md", tasks="all_done")]),
         ],
     )
-    assert engine.current_phase(cfg, tmp_path).name == "coding"
+    assert current_phase_name(cfg, tmp_path) == "coding"
 
 
 def test_evaluate_file_tasks_empty_file(tmp_path):
@@ -282,7 +288,7 @@ def test_evaluate_file_tasks_empty_file(tmp_path):
     )
     (tmp_path / "tasks.md").write_text("# No checkboxes\n")
     # total == 0 → condition fails
-    assert engine.current_phase(cfg, tmp_path).name == "coding"
+    assert current_phase_name(cfg, tmp_path) == "coding"
 
 
 def test_evaluate_glob_tasks_all_done(tmp_path):
@@ -297,7 +303,7 @@ def test_evaluate_glob_tasks_all_done(tmp_path):
     (tmp_path / "s2").mkdir()
     (tmp_path / "s1" / "tasks.md").write_text("- [x] Done\n")
     (tmp_path / "s2" / "tasks.md").write_text("- [ ] Not done\n")
-    assert engine.current_phase(cfg, tmp_path).name == "coding"
+    assert current_phase_name(cfg, tmp_path) == "coding"
 
     (tmp_path / "s2" / "tasks.md").write_text("- [x] Done\n")
     assert engine.current_phase(cfg, tmp_path) is None
@@ -318,6 +324,7 @@ def test_find_dir_template_match(tmp_path):
     task_dir, entry = engine.find_dir_template(cfg, spec_dir)
     # task_dir is the directory from which `markstate new specs/01-auth` would be run
     assert task_dir == tmp_path
+    assert entry is not None
     assert entry.dir == "specs/*"
 
 
@@ -368,6 +375,7 @@ def test_next_task_searches_subdirs(tmp_path):
     sub.mkdir(parents=True)
     (sub / "tasks.md").write_text("- [ ] Nested task\n")
     result = engine.next_task(cfg, tmp_path)
+    assert result is not None
     assert result["task"] == "Nested task"
 
 
