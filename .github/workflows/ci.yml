@@ -24,3 +24,6 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
+
+      - name: Run type checker
+        run: uv run ty check markstate

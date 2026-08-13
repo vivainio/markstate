@@ -42,4 +42,5 @@ quote-style = "double"
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ty==0.0.71",
 ]

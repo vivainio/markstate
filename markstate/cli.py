@@ -72,7 +72,10 @@ def _add_set_arg(p: argparse.ArgumentParser) -> None:
         metavar="KEY=VALUE",
         action="append",
         default=[],
-        help="Set extra frontmatter fields ('me' = git user, 'now' = UTC timestamp, 'today' = UTC date). Prefix key with 'once-' to write only when absent.",
+        help=(
+            "Set extra frontmatter fields ('me' = git user, 'now' = UTC timestamp, "
+            "'today' = UTC date). Prefix key with 'once-' to write only when absent."
+        ),
     )
     p.add_argument(
         "--unset",
@@ -371,7 +374,6 @@ def _cmd_new(args: argparse.Namespace) -> None:
     # Resolve the target path relative to docs_root.
     # If inside a dir template (cd'd into a change dir), a bare filename
     # resolves via cwd. Otherwise, resolve via explicit --dir, focus, or cwd.
-    file_path = Path(args.file)
     _, dir_entry = engine.find_dir_template(config, cwd)
 
     if dir_entry and "/" not in args.file:
@@ -985,7 +987,9 @@ def _resolve_query_value(value: str) -> str:
     if value == "today":
         return datetime.now(UTC).strftime("%Y-%m-%d")
     if value == "me":
-        return engine.resolve_magic("me")
+        resolved = engine.resolve_magic("me")
+        assert isinstance(resolved, str)
+        return resolved
     m = _REL_AGO_RE.match(value)
     if m:
         n = int(m.group(1))
@@ -1004,18 +1008,26 @@ def _eval_predicate(actual: object, op: str, value: str) -> bool:
         return value.lower() in actual_str.lower()
     # Ordered comparison: try numeric, fall back to string (handles ISO dates)
     try:
-        a: float | str = float(actual_str)
-        v: float | str = float(value)
+        actual_number = float(actual_str)
+        value_number = float(value)
     except ValueError:
-        a, v = actual_str, value
-    if op == ">":
-        return a > v
-    if op == "<":
-        return a < v
-    if op == ">=":
-        return a >= v
-    if op == "<=":
-        return a <= v
+        if op == ">":
+            return actual_str > value
+        if op == "<":
+            return actual_str < value
+        if op == ">=":
+            return actual_str >= value
+        if op == "<=":
+            return actual_str <= value
+    else:
+        if op == ">":
+            return actual_number > value_number
+        if op == "<":
+            return actual_number < value_number
+        if op == ">=":
+            return actual_number >= value_number
+        if op == "<=":
+            return actual_number <= value_number
     return False
 
 
@@ -1388,12 +1400,17 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
         nargs="?",
         default=None,
         metavar="SOURCE",
-        help="Copy from an existing flow.yml (file or URL) instead of writing the built-in template.",
+        help=(
+            "Copy from an existing flow.yml (file or URL) instead of writing the built-in template."
+        ),
     )
     p.add_argument(
         "--hidden",
         action="store_true",
-        help="Write to .markstate/flow.yml instead of flow.yml. Only applies when no flow.yml exists upward from cwd.",
+        help=(
+            "Write to .markstate/flow.yml instead of flow.yml. Only applies when no flow.yml "
+            "exists upward from cwd."
+        ),
     )
 
     # new
@@ -1504,7 +1521,10 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
         "predicates",
         metavar="FIELD=VALUE",
         nargs="+",
-        help="One or more predicates: field=value, field!=value, field>value, field<value, field>=value, field<=value",
+        help=(
+            "One or more predicates: field=value, field!=value, field>value, field<value, "
+            "field>=value, field<=value"
+        ),
     )
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
     p.add_argument(

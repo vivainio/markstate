@@ -4,11 +4,12 @@ import difflib
 import importlib.util
 import re
 import subprocess
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -159,7 +160,7 @@ class FlowConfig:
         if not self.hook_dirs:
             self.hook_dirs = (self.root,)
 
-    def load_hook(self, name: str):
+    def load_hook(self, name: str) -> Callable[..., object] | None:
         """Return the named callable from flow_hooks.py.
 
         Searches each directory in `hook_dirs` (project flow.yml first,
@@ -179,6 +180,8 @@ class FlowConfig:
             spec = importlib.util.spec_from_file_location(
                 f"markstate_flow_hooks_{id(self)}", hooks_path
             )
+            if spec is None or spec.loader is None:
+                raise FlowConfigError(f"cannot load hooks module: {hooks_path}")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
@@ -315,8 +318,10 @@ def _load(path: Path, variables: dict[str, str], known: set[str]) -> FlowConfig:
     else:
         merged = raw
 
-    phases = [_parse_phase(p) for p in merged.get("phases", [])]
-    transitions = [_parse_transition(t) for t in merged.get("transitions", [])]
+    phases = [_parse_phase(cast(dict[str, Any], p)) for p in merged.get("phases", [])]
+    transitions = [
+        _parse_transition(cast(dict[str, Any], t)) for t in merged.get("transitions", [])
+    ]
 
     docs_root_raw = merged.get("docs_root")
     if docs_root_raw is not None:

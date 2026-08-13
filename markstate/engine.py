@@ -5,6 +5,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 from markstate import frontmatter
 from markstate.config import (
@@ -27,7 +28,7 @@ class TransitionContext:
     """
 
     doc_path: Path
-    frontmatter: dict
+    frontmatter: dict[str, object]
     transition: str
     from_state: str
     to_state: str
@@ -46,6 +47,25 @@ class HookAbort(TransitionError):
 
 class TaskNotFoundError(Exception):
     pass
+
+
+class NextTransition(TypedDict):
+    file: str
+    status: str | None
+    transitions: list[str]
+    missing: bool
+    hint: NotRequired[str]
+
+
+class PhaseStatus(TypedDict):
+    name: str
+    complete: bool
+    gates_pass: bool
+
+
+class StatusResult(TypedDict):
+    current_phase: str | None
+    phases: list[PhaseStatus]
 
 
 _ONCE_PREFIX = "once-"
@@ -223,9 +243,9 @@ def collect_dir_files(config: FlowConfig, dir_pattern: str) -> list[ProducedDoc]
     return result
 
 
-def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, object]]:
+def next_transitions(config: FlowConfig, directory: Path) -> list[NextTransition]:
     """Return applicable transitions and missing produced documents."""
-    results = []
+    results: list[NextTransition] = []
 
     for path in filtered_rglob(directory, "*.md", config.exclude_dirs):
         doc = frontmatter.load(path)
@@ -291,7 +311,7 @@ def next_transitions(config: FlowConfig, directory: Path) -> list[dict[str, obje
     return results
 
 
-def status(config: FlowConfig, directory: Path) -> dict[str, object]:
+def status(config: FlowConfig, directory: Path) -> StatusResult:
     """Return a status summary for the given directory."""
     phase = current_phase(config, directory)
     return {
