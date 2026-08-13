@@ -1,10 +1,7 @@
 """Validate Markstate flow documents against the bundled schema."""
 
 import json
-import shutil
-import subprocess
 import tempfile
-from importlib import import_module
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -97,50 +94,16 @@ def _selected_reference(reference: Any, definitions: Any, overrides: dict[str, s
 
 def validate_flow(path: Path) -> list[str]:
     """Return human-readable schema errors for one flow file."""
+    # Keep jsonschema and its dependencies off the normal CLI startup path.
+    from markstate._schema_runner import validate  # noqa: PLC0415
+
     try:
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as error:
         return [f"invalid YAML: {error}"]
 
-    try:
-        runner = import_module("markstate._schema_runner")
-    except ImportError:
-        pass
-    else:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            document_path = Path(temp_dir) / "flow.json"
-            document_path.write_text(json.dumps(document), encoding="utf-8")
-            schema_path = files("markstate").joinpath("schema", SCHEMA_VERSION, "flow.schema.json")
-            return list(runner.validate(Path(str(schema_path)), document_path))
-
-    uv = shutil.which("uv")
-    if uv is None:
-        return ["validation requires uv; install it from https://docs.astral.sh/uv/"]
-
-    schema_path = files("markstate").joinpath("schema", SCHEMA_VERSION, "flow.schema.json")
-    runner_path = files("markstate").joinpath("_schema_runner.py")
     with tempfile.TemporaryDirectory() as temp_dir:
         document_path = Path(temp_dir) / "flow.json"
         document_path.write_text(json.dumps(document), encoding="utf-8")
-        result = subprocess.run(
-            [
-                uv,
-                "run",
-                "--quiet",
-                "--isolated",
-                "--no-project",
-                "--with",
-                "jsonschema>=4.26",
-                "python",
-                str(runner_path),
-                str(schema_path),
-                str(document_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip() or "unknown uv error"
-        return [f"could not run isolated schema validator: {detail}"]
-    return list(json.loads(result.stdout))
+        schema_path = files("markstate").joinpath("schema", SCHEMA_VERSION, "flow.schema.json")
+        return validate(Path(str(schema_path)), document_path)

@@ -197,10 +197,9 @@ markstate validate
 markstate validate path/to/flow.yml
 ```
 
-Validation uses the schema shipped with the installed Markstate version. To
-keep Markstate's installation small, the command runs `jsonschema` in an
-isolated uv environment; the first run may download and cache that package. It
-follows `use` and `redirect`, validating every reachable flow file;
+Validation uses the schema shipped with the installed Markstate version. The
+validator is loaded only when this command runs, keeping normal command startup
+fast. It follows `use` and `redirect`, validating every reachable flow file;
 variable-selected references use the normal `-D` and `MARKSTATE_VARIABLES`
 values. Use `markstate doctor` for additional document-tree diagnostics.
 
