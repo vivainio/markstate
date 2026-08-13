@@ -27,3 +27,6 @@ jobs:
 
       - name: Run type checker
         run: uv run ty check markstate tests
+
+      - name: Validate flow schema and examples
+        run: uv run --with jsonschema python scripts/validate_schema.py

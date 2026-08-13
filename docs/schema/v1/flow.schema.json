@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vivainio.github.io/markstate/schema/v1/flow.schema.json",
+  "title": "Markstate flow v1",
+  "description": "A Markstate document workflow definition.",
+  "type": "object",
+  "properties": {
+    "$variables": {
+      "type": "object",
+      "description": "Runtime variables available to $select expressions.",
+      "additionalProperties": { "$ref": "#/$defs/variable" }
+    },
+    "use": {
+      "description": "Base flow to load before applying local overrides.",
+      "oneOf": [
+        { "$ref": "#/$defs/path" },
+        { "$ref": "#/$defs/select" }
+      ]
+    },
+    "redirect": {
+      "description": "Complete flow to which loading is transferred.",
+      "oneOf": [
+        { "$ref": "#/$defs/path" },
+        { "$ref": "#/$defs/select" }
+      ]
+    },
+    "docs_root": {
+      "description": "Document root, relative to this flow or absolute.",
+      "oneOf": [
+        { "$ref": "#/$defs/path" },
+        { "$ref": "#/$defs/select" }
+      ]
+    },
+    "status_field": {
+      "description": "Markdown front matter field containing document state.",
+      "oneOf": [
+        { "type": "string", "minLength": 1, "default": "status" },
+        { "$ref": "#/$defs/select" }
+      ]
+    },
+    "exclude_dirs": {
+      "description": "Additional directory names excluded from recursive searches.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        { "$ref": "#/$defs/select" }
+      ]
+    },
+    "phases": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/phase" }
+        },
+        { "$ref": "#/$defs/select" }
+      ]
+    },
+    "transitions": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transition" }
+        },
+        { "$ref": "#/$defs/select" }
+      ]
+    }
+  },
+  "anyOf": [
+    { "required": ["redirect"] },
+    { "required": ["use"] },
+    { "required": ["phases"] },
+    { "required": ["transitions"] }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "variable": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": ["string", "number", "boolean"] },
+          "uniqueItems": true
+        },
+        "default": { "type": ["string", "number", "boolean"] },
+        "required": { "type": "boolean", "default": false }
+      },
+      "additionalProperties": false
+    },
+    "select": {
+      "type": "object",
+      "description": "Choose a value using a declared runtime variable.",
+      "required": ["$select", "cases"],
+      "properties": {
+        "$select": { "type": "string", "minLength": 1 },
+        "cases": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "fieldMap": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+    },
+    "condition": {
+      "type": "object",
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "glob": { "type": "string", "minLength": 1 },
+        "status": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ]
+        },
+        "all_status": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ]
+        },
+        "tasks": { "const": "all_done" }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        { "required": ["file", "status"] },
+        { "required": ["glob", "all_status"] },
+        { "required": ["file", "tasks"] }
+      ]
+    },
+    "producedFile": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "required": ["file"],
+          "properties": {
+            "file": { "type": "string", "minLength": 1 },
+            "template": { "type": "string" },
+            "auto": { "type": "boolean", "default": false },
+            "set": { "$ref": "#/$defs/fieldMap" },
+            "unset": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "producedDir": {
+      "type": "object",
+      "required": ["dir"],
+      "properties": {
+        "dir": { "type": "string", "minLength": 1 },
+        "files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/producedFile" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "phase": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "scope": { "type": "string", "minLength": 1 },
+        "produces": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/producedFile" },
+              { "$ref": "#/$defs/producedDir" }
+            ]
+          }
+        },
+        "gates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "advance_when": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "transition": {
+      "type": "object",
+      "required": ["name", "from", "to"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "set": { "$ref": "#/$defs/fieldMap" },
+        "unset": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "require_set": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "gates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+

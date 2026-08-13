@@ -1,0 +1,72 @@
+[project]
+site_name = "Markstate"
+site_description = "Document workflow state tracking for humans and AI agents."
+site_author = "Ville Vainio"
+site_url = "https://vivainio.github.io/markstate/"
+docs_dir = "docs"
+repo_url = "https://github.com/vivainio/markstate"
+repo_name = "vivainio/markstate"
+edit_uri = "edit/main/docs/"
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = "getting-started.md" },
+  { "Command reference" = "commands.md" },
+  { "Configuration" = [
+    { "Flow files" = "configuration/index.md" },
+    { "Variables and selection" = "configuration/variables.md" },
+    { "Shared and scoped flows" = "configuration/composition.md" },
+  ] },
+  { "JSON Schema" = "schema/index.md" },
+  { "Examples" = "examples.md" },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.action.edit",
+  "content.action.view",
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.sections",
+  "navigation.top",
+  "search.highlight",
+]
+
+[project.theme.icon]
+logo = "lucide/workflow"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "indigo"
+accent = "deep-orange"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "indigo"
+accent = "deep-orange"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/vivainio/markstate"
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
