@@ -395,6 +395,128 @@ produces:
 | `from` | Required current status |
 | `to` | New status after applying the transition |
 
+## Variables and flow switching
+
+Variables let one `flow.yml` choose configuration at runtime. Declare every variable under
+`$variables`, then use `$select` wherever a YAML value is accepted:
+
+```yaml
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+```
+
+Supply values on the command line with `-D` or `--variable`:
+
+```bash
+markstate -D track=quick status
+markstate --variable track=quick status
+```
+
+For CI and agent environments, supply one or more comma-separated values through
+`MARKSTATE_VARIABLES`:
+
+```bash
+MARKSTATE_VARIABLES="track=quick,platform=cloud" markstate status
+```
+
+Command-line values take precedence over `MARKSTATE_VARIABLES`, which takes precedence over
+the declared default. Inputs are strict: misspelled or undeclared variables, invalid values,
+and unknown selection cases are errors. A variable without a default can be required:
+
+```yaml
+$variables:
+  platform:
+    values: [cloud, local]
+    required: true
+```
+
+### Selecting a base flow with `use`
+
+Use `$select` as the value of `use` when the project should import one of several base flows
+while retaining local overrides:
+
+```yaml
+# flow.yml
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+
+use:
+  $select: track
+  cases:
+    standard: flows/standard.yml
+    quick: flows/quick.yml
+
+# This local value overrides the selected base flow.
+docs_root: project-docs
+```
+
+The paths in `cases` are resolved relative to this `flow.yml`. Running without a variable
+uses `flows/standard.yml`; either of these selects `flows/quick.yml`:
+
+```bash
+markstate -D track=quick status
+MARKSTATE_VARIABLES="track=quick" markstate status
+```
+
+Choose `use` when the selected flow provides defaults and the selecting file needs to
+customize fields such as `docs_root`, `status_field`, phases, or transitions.
+
+### Forwarding to a flow with `redirect`
+
+Use `$select` as the value of `redirect` when the current file is only a routing stub:
+
+```yaml
+# flow.yml
+$variables:
+  workflow:
+    values: [product, operations]
+    default: product
+
+redirect:
+  $select: workflow
+  cases:
+    product: ../product-workflows/flow.yml
+    operations: ../operations-workflows/flow.yml
+```
+
+Select the forwarded flow in the same way:
+
+```bash
+markstate --variable workflow=operations status
+```
+
+Unlike `use`, `redirect` transfers control completely: configuration fields beside it are
+ignored. Choose `redirect` when each destination is a complete, authoritative flow.
+
+### Selecting other values
+
+`$select` is not limited to `use` and `redirect`. It can select scalars, mappings, lists,
+or nested values:
+
+```yaml
+docs_root:
+  $select: track
+  cases:
+    standard: docs
+    quick: notes
+
+phases:
+  $select: track
+  cases:
+    standard:
+      - name: drafting
+      - name: implementing
+    quick:
+      - name: implementing
+```
+
+Markstate resolves selections after parsing YAML and does not perform `${variable}` string
+interpolation.
+
 ## Scoped phases
 
 When a single project has different kinds of work that follow different workflows, use `scope` to restrict phases to specific directory prefixes. Each directory only sees phases whose scope matches its path (plus any unscoped phases).

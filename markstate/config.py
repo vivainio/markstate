@@ -1,11 +1,14 @@
 """Load and validate flow.yml, walking up from cwd to find it."""
 
+import difflib
 import importlib.util
 import re
 import subprocess
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import yaml
 
@@ -35,7 +38,9 @@ def _main_worktree_anchor(parent: Path) -> Path | None:
     try:
         result = subprocess.run(
             ["git", "-C", str(parent), "rev-parse", "--show-toplevel", "--git-common-dir"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
@@ -71,7 +76,7 @@ HOOKS_FILENAME = "flow_hooks.py"
 
 
 class FlowConfigError(Exception):
-    """Raised when flow.yml is found but cannot be loaded (broken redirect, missing use target, etc.)."""
+    """Raised when a discovered flow.yml cannot be loaded."""
 
 
 @dataclass
@@ -126,12 +131,15 @@ class Phase:
 _DEFAULT_EXCLUDE_DIRS = {"node_modules", ".git", "__pycache__", ".venv", "venv"}
 
 
-def filtered_rglob(directory: Path, pattern: str, exclude_dirs: set[str] | None = None) -> list[Path]:
+def filtered_rglob(
+    directory: Path, pattern: str, exclude_dirs: set[str] | None = None
+) -> list[Path]:
     """Like Path.rglob but skips excluded directory names."""
     if exclude_dirs is None:
         exclude_dirs = _DEFAULT_EXCLUDE_DIRS
     return sorted(
-        p for p in directory.rglob(pattern)
+        p
+        for p in directory.rglob(pattern)
         if not (exclude_dirs & set(p.relative_to(directory).parts))
     )
 
@@ -208,15 +216,21 @@ class FlowConfig:
         return result
 
 
-def find_and_load(start: Path | None = None) -> FlowConfig:
+def find_and_load(start: Path | None = None, variables: dict[str, str] | None = None) -> FlowConfig:
     """Walk up from start (default: cwd) to find flow.yml and load it."""
     path = _find(start or Path.cwd())
     if path is None:
-        raise FileNotFoundError(f"{CONFIG_FILENAME} not found in {start or Path.cwd()} or any parent")
-    return _load(path)
+        raise FileNotFoundError(
+            f"{CONFIG_FILENAME} not found in {start or Path.cwd()} or any parent"
+        )
+    overrides = variables or {}
+    known: set[str] = set()
+    config = _load(path, overrides, known)
+    _validate_variable_names(overrides, known)
+    return config
 
 
-def find_flow_target(start: Path | None = None) -> Path:
+def find_flow_target(start: Path | None = None, variables: dict[str, str] | None = None) -> Path:
     """Walk up from start to find flow.yml, follow any redirect chain,
     and return the Path of the final real flow file.
 
@@ -228,22 +242,28 @@ def find_flow_target(start: Path | None = None) -> Path:
     """
     path = _find(start or Path.cwd())
     if path is None:
-        raise FileNotFoundError(f"{CONFIG_FILENAME} not found in {start or Path.cwd()} or any parent")
+        raise FileNotFoundError(
+            f"{CONFIG_FILENAME} not found in {start or Path.cwd()} or any parent"
+        )
     seen: set[Path] = set()
+    overrides = variables or {}
+    known: set[str] = set()
     while True:
         resolved = path.resolve()
         if resolved in seen:
             raise ValueError(f"redirect cycle involving {resolved}")
         seen.add(resolved)
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict):
+            raise FlowConfigError(f"flow must be a mapping: {path}")
+        raw = _resolve_selects(loaded, overrides, path, known)
         redirect = raw.get("redirect")
         if not redirect:
+            _validate_variable_names(overrides, known)
             return path
         target = _resolve_relative(path, redirect)
         if not target.exists():
-            raise FlowConfigError(
-                f"redirect target not found: {target} (referenced from {path})"
-            )
+            raise FlowConfigError(f"redirect target not found: {target} (referenced from {path})")
         path = target
 
 
@@ -262,15 +282,16 @@ def _find(start: Path) -> Path | None:
     return None
 
 
-def _load(path: Path) -> FlowConfig:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+def _load(path: Path, variables: dict[str, str], known: set[str]) -> FlowConfig:
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(loaded, dict):
+        raise FlowConfigError(f"flow must be a mapping: {path}")
+    raw = _resolve_selects(loaded, variables, path, known)
     if "redirect" in raw:
         target = _resolve_relative(path, raw["redirect"])
         if not target.exists():
-            raise FlowConfigError(
-                f"redirect target not found: {target} (referenced from {path})"
-            )
-        return _load(target)
+            raise FlowConfigError(f"redirect target not found: {target} (referenced from {path})")
+        return _load(target, variables, known)
 
     config_dir = path.parent
     hook_dirs: tuple[Path, ...] = (config_dir,)
@@ -280,10 +301,11 @@ def _load(path: Path) -> FlowConfig:
         if not use_path.is_absolute():
             use_path = _resolve_relative(path, str(use_path))
         if not use_path.exists():
-            raise FlowConfigError(
-                f"use target not found: {use_path} (referenced from {path})"
-            )
-        base = yaml.safe_load(use_path.read_text(encoding="utf-8"))
+            raise FlowConfigError(f"use target not found: {use_path} (referenced from {path})")
+        loaded_base = yaml.safe_load(use_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded_base, dict):
+            raise FlowConfigError(f"flow must be a mapping: {use_path}")
+        base = _resolve_selects(loaded_base, variables, use_path, known)
         # Local keys override the imported definition
         merged = {**base, **{k: v for k, v in raw.items() if k != "use"}}
         # Fall back to hooks beside the use: target if the project has none
@@ -316,6 +338,90 @@ def _load(path: Path) -> FlowConfig:
         exclude_dirs=exclude_dirs,
         hook_dirs=hook_dirs,
     )
+
+
+def _resolve_selects(
+    raw: dict[str, Any], overrides: dict[str, str], path: Path, known: set[str]
+) -> dict[str, Any]:
+    """Resolve markstate expressions in one parsed flow document."""
+    document = deepcopy(raw)
+    definitions = document.pop("$variables", {})
+    if not isinstance(definitions, dict):
+        raise FlowConfigError(f"$variables must be a mapping in {path}")
+    known.update(str(name) for name in definitions)
+
+    values: dict[str, str] = {}
+    for name, definition in definitions.items():
+        if not isinstance(name, str) or not isinstance(definition, dict):
+            raise FlowConfigError(f"each $variables entry must be a mapping in {path}")
+        if name in overrides:
+            value = overrides[name]
+        elif "default" in definition:
+            value = str(definition["default"])
+        elif definition.get("required", False):
+            raise FlowConfigError(f"missing required variable '{name}' in {path}")
+        else:
+            continue
+        allowed = definition.get("values")
+        if allowed is not None:
+            if not isinstance(allowed, list):
+                raise FlowConfigError(f"values for variable '{name}' must be a list in {path}")
+            allowed_values = [str(item) for item in allowed]
+            if value not in allowed_values:
+                choices = ", ".join(allowed_values)
+                raise FlowConfigError(
+                    f"invalid value '{value}' for variable '{name}' in {path}; "
+                    f"expected one of: {choices}"
+                )
+        values[name] = value
+
+    values.update({name: value for name, value in overrides.items() if name not in definitions})
+    resolved = _resolve_value(document, values, path)
+    if not isinstance(resolved, dict):
+        raise FlowConfigError(f"resolved flow must be a mapping: {path}")
+    return resolved
+
+
+def _validate_variable_names(overrides: dict[str, str], known: set[str]) -> None:
+    unknown = sorted(set(overrides) - known)
+    if not unknown:
+        return
+    name = unknown[0]
+    message = f"unknown variable '{name}'"
+    suggestion = difflib.get_close_matches(name, sorted(known), n=1)
+    if suggestion:
+        message += f"; did you mean '{suggestion[0]}'?"
+    if known:
+        message += f"; known variables: {', '.join(sorted(known))}"
+    else:
+        message += "; this flow declares no variables"
+    raise FlowConfigError(message)
+
+
+def _resolve_value(value: Any, variables: dict[str, str], path: Path) -> Any:
+    if isinstance(value, list):
+        return [_resolve_value(item, variables, path) for item in value]
+    if not isinstance(value, dict):
+        return value
+    if "$select" not in value:
+        return {key: _resolve_value(item, variables, path) for key, item in value.items()}
+    if set(value) != {"$select", "cases"}:
+        raise FlowConfigError(
+            f"$select expression must contain exactly '$select' and 'cases' in {path}"
+        )
+    name = value["$select"]
+    cases = value["cases"]
+    if not isinstance(name, str) or not isinstance(cases, dict):
+        raise FlowConfigError(f"$select must name a variable and cases must be a mapping in {path}")
+    if name not in variables:
+        raise FlowConfigError(f"no value supplied for variable '{name}' in {path}")
+    selected = variables[name]
+    if selected not in cases:
+        choices = ", ".join(str(item) for item in cases)
+        raise FlowConfigError(
+            f"no case '{selected}' in $select for '{name}' in {path}; expected one of: {choices}"
+        )
+    return _resolve_value(cases[selected], variables, path)
 
 
 def _parse_phase(raw: dict) -> Phase:

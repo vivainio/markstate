@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from markstate.config import ProducedDir, find_and_load, find_flow_target
+from markstate.config import FlowConfigError, ProducedDir, find_and_load, find_flow_target
 
 
 def write_flow(tmp_path: Path, content: str) -> Path:
@@ -22,6 +22,162 @@ def test_load_minimal(tmp_path):
     assert cfg.docs_root == tmp_path
     assert cfg.phases == []
     assert cfg.transitions == []
+
+
+def test_select_uses_declared_default_recursively(tmp_path):
+    write_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+docs_root:
+  $select: track
+  cases:
+    standard: docs
+    quick: notes
+phases:
+  - name:
+      $select: track
+      cases:
+        standard: drafting
+        quick: doing
+transitions: []
+""",
+    )
+
+    cfg = find_and_load(tmp_path)
+
+    assert cfg.docs_root == tmp_path / "docs"
+    assert cfg.phases[0].name == "drafting"
+
+
+def test_variable_override_selects_values(tmp_path):
+    write_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+docs_root:
+  $select: track
+  cases:
+    standard: docs
+    quick: notes
+phases: []
+transitions: []
+""",
+    )
+
+    cfg = find_and_load(tmp_path, variables={"track": "quick"})
+
+    assert cfg.docs_root == tmp_path / "notes"
+
+
+def test_select_can_choose_use_target(tmp_path):
+    (tmp_path / "standard.yml").write_text(
+        "status_field: standard_status\nphases: []\ntransitions: []\n"
+    )
+    (tmp_path / "quick.yml").write_text("status_field: quick_status\nphases: []\ntransitions: []\n")
+    write_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+use:
+  $select: track
+  cases:
+    standard: standard.yml
+    quick: quick.yml
+""",
+    )
+
+    cfg = find_and_load(tmp_path, variables={"track": "quick"})
+
+    assert cfg.status_field == "quick_status"
+
+
+def test_select_can_choose_redirect_target(tmp_path):
+    (tmp_path / "standard.yml").write_text("phases: []\ntransitions: []\n")
+    (tmp_path / "quick.yml").write_text("phases: []\ntransitions: []\n")
+    flow = write_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+redirect:
+  $select: track
+  cases:
+    standard: standard.yml
+    quick: quick.yml
+""",
+    )
+
+    target = find_flow_target(flow.parent, variables={"track": "quick"})
+
+    assert target == tmp_path / "quick.yml"
+
+
+def test_select_rejects_invalid_variable_value(tmp_path):
+    write_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+phases: []
+transitions: []
+""",
+    )
+
+    with pytest.raises(FlowConfigError, match="invalid value 'quik'"):
+        find_and_load(tmp_path, variables={"track": "quik"})
+
+
+def test_unknown_variable_lists_known_names_and_suggestion(tmp_path):
+    write_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    default: standard
+  platform:
+    default: cloud
+phases: []
+transitions: []
+""",
+    )
+
+    with pytest.raises(FlowConfigError) as error:
+        find_and_load(tmp_path, variables={"trak": "quick"})
+
+    assert "unknown variable 'trak'" in str(error.value)
+    assert "did you mean 'track'?" in str(error.value)
+    assert "known variables: platform, track" in str(error.value)
+
+
+def test_variable_declared_in_redirect_target_is_known(tmp_path):
+    target = tmp_path / "target.yml"
+    target.write_text("""
+$variables:
+  platform:
+    values: [cloud, local]
+    default: local
+phases: []
+transitions: []
+""")
+    write_flow(tmp_path, "redirect: target.yml\n")
+
+    cfg = find_and_load(tmp_path, variables={"platform": "cloud"})
+
+    assert cfg.phases == []
 
 
 def test_docs_root_defaults_to_config_dir(tmp_path):
@@ -68,7 +224,13 @@ def test_redirect_resolves_via_main_worktree_anchor(tmp_path):
     subprocess.run(
         ["git", "-C", str(project), "commit", "-q", "--allow-empty", "-m", "init"],
         check=True,
-        env={"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "PATH": __import__("os").environ["PATH"]},
+        env={
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@t",
+            "PATH": __import__("os").environ["PATH"],
+        },
     )
 
     # Sibling of the main project (NOT sibling of the worktrees container)
@@ -83,7 +245,13 @@ def test_redirect_resolves_via_main_worktree_anchor(tmp_path):
     subprocess.run(
         ["git", "-C", str(project_use), "commit", "-q", "--allow-empty", "-m", "init"],
         check=True,
-        env={"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "PATH": __import__("os").environ["PATH"]},
+        env={
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@t",
+            "PATH": __import__("os").environ["PATH"],
+        },
     )
     (project_use / "flow.yml").write_text("use: ../shared/flow.yml\n")
 
@@ -93,7 +261,7 @@ def test_redirect_resolves_via_main_worktree_anchor(tmp_path):
         ["git", "-C", str(project), "worktree", "add", "-q", str(wt), "-b", "feat"],
         check=True,
     )
-    # The worktree has the same flow.yml (it's tracked? no — untracked, but file exists on disk via copy)
+    # The worktree has the same untracked flow.yml, copied onto disk.
     (wt / "flow.yml").write_text("redirect: ../shared/flow.yml\n")
 
     # Without the fix, this would resolve to tmp_path/project/.worktrees/shared/flow.yml
@@ -110,21 +278,22 @@ def test_redirect_prefers_naive_resolution_in_worktree(tmp_path):
     project.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(project)], check=True)
     env = {
-        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
-        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
         "PATH": __import__("os").environ["PATH"],
     }
     subprocess.run(
         ["git", "-C", str(project), "commit", "-q", "--allow-empty", "-m", "init"],
-        check=True, env=env,
+        check=True,
+        env=env,
     )
 
     # Sibling of the MAIN checkout (would be picked up by the git anchor)
     main_sibling = tmp_path / "shared"
     main_sibling.mkdir()
-    (main_sibling / "flow.yml").write_text(
-        "docs_root: from_main\nphases: []\ntransitions: []\n"
-    )
+    (main_sibling / "flow.yml").write_text("docs_root: from_main\nphases: []\ntransitions: []\n")
 
     # Worktree at project/.worktrees/feat -- and a sibling of *that* called shared
     wt = project / ".worktrees" / "feat"
@@ -134,9 +303,7 @@ def test_redirect_prefers_naive_resolution_in_worktree(tmp_path):
     )
     wt_sibling = project / ".worktrees" / "shared"
     wt_sibling.mkdir()
-    (wt_sibling / "flow.yml").write_text(
-        "docs_root: from_worktree\nphases: []\ntransitions: []\n"
-    )
+    (wt_sibling / "flow.yml").write_text("docs_root: from_worktree\nphases: []\ntransitions: []\n")
     (wt / "flow.yml").write_text("redirect: ../shared/flow.yml\n")
 
     # Naive resolution finds wt_sibling first, so that wins.
@@ -150,12 +317,8 @@ def test_redirect_loads_target(tmp_path):
     docs_repo.mkdir()
     source_repo.mkdir()
 
-    (docs_repo / "flow.yml").write_text(
-        "docs_root: changes\nphases: []\ntransitions: []\n"
-    )
-    (source_repo / "flow.yml").write_text(
-        "redirect: ../docs-repo/flow.yml\n"
-    )
+    (docs_repo / "flow.yml").write_text("docs_root: changes\nphases: []\ntransitions: []\n")
+    (source_repo / "flow.yml").write_text("redirect: ../docs-repo/flow.yml\n")
 
     cfg = find_and_load(source_repo)
     assert cfg.docs_root == (docs_repo / "changes").resolve()
@@ -169,7 +332,9 @@ def test_status_field_custom(tmp_path):
 
 
 def test_parse_phase_with_gates_and_advance_when(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
     advance_when:
@@ -180,7 +345,8 @@ phases:
       - file: spec.md
         status: approved
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     drafting = cfg.phase("drafting")
     assert drafting is not None
@@ -193,14 +359,17 @@ transitions: []
 
 
 def test_parse_glob_condition(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: review
     advance_when:
       - glob: "docs/*.md"
         all_status: reviewed
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     cond = cfg.phases[0].advance_when[0]
     assert cond.glob == "docs/*.md"
@@ -208,14 +377,17 @@ transitions: []
 
 
 def test_parse_tasks_condition(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: coding
     advance_when:
       - file: tasks.md
         tasks: all_done
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     cond = cfg.phases[0].advance_when[0]
     assert cond.file == "tasks.md"
@@ -223,7 +395,9 @@ transitions: []
 
 
 def test_parse_transitions(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases: []
 transitions:
   - name: approve
@@ -232,7 +406,8 @@ transitions:
   - name: reject
     from: draft
     to: rejected
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     assert cfg.transition_names() == ["approve", "reject"]
     approve = cfg.transition("approve")
@@ -241,7 +416,9 @@ transitions:
 
 
 def test_parse_produced_doc_with_template(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
     produces:
@@ -249,7 +426,8 @@ phases:
         template: "---\\nstatus: draft\\n---\\n"
         auto: true
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     doc = cfg.phases[0].produces[0]
     assert doc.file == "spec.md"
@@ -258,7 +436,9 @@ transitions: []
 
 
 def test_parse_scope(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
     scope: changes/
@@ -272,7 +452,8 @@ phases:
         status: accepted
   - name: done
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     assert cfg.phases[0].scope == "changes/"
     assert cfg.phases[1].scope == "plans/"
@@ -280,7 +461,9 @@ transitions: []
 
 
 def test_phases_for_filters_by_scope(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
     scope: changes/
@@ -288,7 +471,8 @@ phases:
     scope: plans/
   - name: done
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
 
     changes_dir = tmp_path / "changes" / "auth" / "add-oauth"
@@ -303,12 +487,15 @@ transitions: []
 
 
 def test_phases_for_no_scope_matches_all(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
   - name: done
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     subdir = tmp_path / "anything"
     subdir.mkdir()
@@ -316,20 +503,25 @@ transitions: []
 
 
 def test_phases_for_outside_docs_root(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
     scope: changes/
   - name: done
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     # Outside docs_root → all phases returned (no filtering)
     assert [p.name for p in cfg.phases_for(tmp_path.parent)] == ["drafting", "done"]
 
 
 def test_parse_transition_set_fields(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases: []
 transitions:
   - name: accept
@@ -339,7 +531,8 @@ transitions:
       accepted-at: now
       accepted-by: me
       once-first-accepted-at: now
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     t = cfg.transition("accept")
     assert t.set_fields == {
@@ -350,7 +543,9 @@ transitions:
 
 
 def test_parse_transition_unset_fields(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases: []
 transitions:
   - name: unblock
@@ -361,7 +556,8 @@ transitions:
     unset:
       - blocked-at
       - blocked-reason
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     t = cfg.transition("unblock")
     assert t.set_fields == {"unblocked-at": "now"}
@@ -369,7 +565,9 @@ transitions:
 
 
 def test_parse_transition_require_set(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases: []
 transitions:
   - name: block
@@ -379,27 +577,33 @@ transitions:
       blocked-at: now
     require_set:
       - blocked-reason
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     t = cfg.transition("block")
     assert t.require_set == ["blocked-reason"]
 
 
 def test_parse_transition_require_set_defaults_empty(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases: []
 transitions:
   - name: accept
     from: draft
     to: accepted
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     t = cfg.transition("accept")
     assert t.require_set == []
 
 
 def test_parse_produced_doc_unset_fields(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
     produces:
@@ -408,14 +612,17 @@ phases:
         unset:
           - stale
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     entry = cfg.phases[0].produces[0]
     assert entry.unset_fields == ["stale"]
 
 
 def test_parse_produced_doc_set_fields(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
     produces:
@@ -425,14 +632,17 @@ phases:
           created-at: now
           author: me
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     entry = cfg.phases[0].produces[0]
     assert entry.set_fields == {"created-at": "now", "author": "me"}
 
 
 def test_parse_produced_dir_file_set_fields(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: drafting
     produces:
@@ -443,7 +653,8 @@ phases:
             set:
               created-at: today
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     entry = cfg.phases[0].produces[0]
     assert entry.files[0].set_fields == {"created-at": "today"}
@@ -479,16 +690,12 @@ def test_use_local_docs_root_overrides(tmp_path):
     """Local docs_root overrides the imported one."""
     shared = tmp_path / "shared"
     shared.mkdir()
-    (shared / "flow.yml").write_text(
-        "docs_root: shared-docs\nphases: []\ntransitions: []\n"
-    )
+    (shared / "flow.yml").write_text("docs_root: shared-docs\nphases: []\ntransitions: []\n")
 
     project = tmp_path / "project"
     specs = project / "specs"
     specs.mkdir(parents=True)
-    (project / "flow.yml").write_text(
-        f"use: {shared / 'flow.yml'}\ndocs_root: specs\n"
-    )
+    (project / "flow.yml").write_text(f"use: {shared / 'flow.yml'}\ndocs_root: specs\n")
 
     cfg = find_and_load(project)
     assert cfg.root == project
@@ -515,9 +722,7 @@ def test_use_tilde_expansion(tmp_path, monkeypatch):
     fake_home = tmp_path / "home"
     skills = fake_home / ".claude" / "skills"
     skills.mkdir(parents=True)
-    (skills / "flow.yml").write_text(
-        "status_field: state\nphases: []\ntransitions: []\n"
-    )
+    (skills / "flow.yml").write_text("status_field: state\nphases: []\ntransitions: []\n")
     monkeypatch.setenv("HOME", str(fake_home))
 
     project = tmp_path / "project"
@@ -533,22 +738,20 @@ def test_use_local_status_field_overrides(tmp_path):
     """Local status_field takes precedence over imported one."""
     shared = tmp_path / "shared"
     shared.mkdir()
-    (shared / "flow.yml").write_text(
-        "status_field: phase\nphases: []\ntransitions: []\n"
-    )
+    (shared / "flow.yml").write_text("status_field: phase\nphases: []\ntransitions: []\n")
 
     project = tmp_path / "project"
     project.mkdir()
-    (project / "flow.yml").write_text(
-        f"use: {shared / 'flow.yml'}\nstatus_field: state\n"
-    )
+    (project / "flow.yml").write_text(f"use: {shared / 'flow.yml'}\nstatus_field: state\n")
 
     cfg = find_and_load(project)
     assert cfg.status_field == "state"
 
 
 def test_parse_produced_dir(tmp_path):
-    write_flow(tmp_path, """
+    write_flow(
+        tmp_path,
+        """
 phases:
   - name: review
     produces:
@@ -557,7 +760,8 @@ phases:
           - file: functional-spec.md
           - file: technical-spec.md
 transitions: []
-""")
+""",
+    )
     cfg = find_and_load(tmp_path)
     entry = cfg.phases[0].produces[0]
     assert isinstance(entry, ProducedDir)

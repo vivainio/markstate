@@ -1,6 +1,7 @@
 """CLI integration tests."""
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -82,6 +83,92 @@ def setup_flow(tmp_path: Path, content: str = SIMPLE_FLOW) -> None:
 def test_status_no_config(tmp_path):
     result = run(["status"], tmp_path)
     assert result.returncode == 0
+
+
+def test_variable_option_is_applied_before_loading_flow(tmp_path):
+    setup_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+transitions:
+  $select: track
+  cases:
+    standard: []
+    quick:
+      - name: finish
+        from: draft
+        to: done
+phases: []
+""",
+    )
+
+    result = run(["-D", "track=quick", "transitions"], tmp_path)
+
+    assert result.returncode == 0
+    assert "finish" in result.stdout
+
+
+def test_variables_environment_variable_is_applied(tmp_path):
+    setup_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+transitions:
+  $select: track
+  cases:
+    standard: []
+    quick:
+      - name: finish
+        from: draft
+        to: done
+phases: []
+""",
+    )
+    env = os.environ | {"MARKSTATE_VARIABLES": "track=quick"}
+
+    result = subprocess.run(
+        [sys.executable, "-m", "markstate", "transitions"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0
+    assert "finish" in result.stdout
+
+
+def test_variables_environment_variable_is_strict(tmp_path):
+    setup_flow(
+        tmp_path,
+        """
+$variables:
+  track:
+    values: [standard, quick]
+    default: standard
+phases: []
+transitions: []
+""",
+    )
+    env = os.environ | {"MARKSTATE_VARIABLES": "trak=quick"}
+
+    result = subprocess.run(
+        [sys.executable, "-m", "markstate", "status"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 1
+    assert "unknown variable 'trak'" in result.stderr
+    assert "did you mean 'track'?" in result.stderr
 
 
 def test_status_shows_files(tmp_path):

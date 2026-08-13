@@ -18,7 +18,6 @@ import yaml
 from markstate import engine, frontmatter
 from markstate.config import (
     CONFIG_FILENAME,
-    HIDDEN_CONFIG_PATH,
     FlowConfig,
     FlowConfigError,
     Phase,
@@ -34,11 +33,26 @@ from markstate.engine import TaskNotFoundError, TransitionError
 
 FOCUS_FILE = ".markstate-focus"
 FOCUS_ENV_VAR = "MARKSTATE_FOCUS"
+VARIABLES_ENV_VAR = "MARKSTATE_VARIABLES"
 
 _PRED_RE = re.compile(r"^([a-zA-Z0-9_-]+)(>=|<=|!=|~=|>|<|=)(.+)$")
 _REL_AGO_RE = re.compile(r"^(\d+)([dwmy])$")
 
 _focus_override: str | None = None
+_variable_overrides: dict[str, str] = {}
+
+
+def _parse_variable_items(items: list[str], source: str) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for item in items:
+        if "=" not in item:
+            raise ValueError(f"{source} value must be NAME=VALUE, got '{item}'")
+        name, _, value = item.partition("=")
+        name = name.strip()
+        if not name:
+            raise ValueError(f"{source} variable name cannot be empty")
+        result[name] = value.strip()
+    return result
 
 
 def _parse_set_args(set_args: list[str]) -> dict[str, str]:
@@ -86,7 +100,7 @@ def _apply_frontmatter_edits(
 
 def _try_load_config() -> FlowConfig | None:
     try:
-        return find_and_load()
+        return find_and_load(variables=_variable_overrides)
     except FileNotFoundError:
         return None
     except FlowConfigError as e:
@@ -178,7 +192,7 @@ def _resolve_directory(args: argparse.Namespace, config: FlowConfig | None) -> P
 
 def _load_config() -> FlowConfig:
     try:
-        return find_and_load()
+        return find_and_load(variables=_variable_overrides)
     except FileNotFoundError:
         print(
             f"error: flow.yml not found (searched from {Path.cwd()} upward)",
@@ -300,7 +314,7 @@ def _diff_counts(old: str, new: str) -> tuple[int, int]:
 def _cmd_init(args: argparse.Namespace) -> None:
     # If a flow.yml is already reachable from cwd, replace it (idempotent upgrade).
     try:
-        existing = find_flow_target()
+        existing = find_flow_target(variables=_variable_overrides)
     except (FileNotFoundError, ValueError):
         existing = None
 
@@ -1258,7 +1272,7 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
     config = None
     if final is not None and not problems:
         try:
-            config = find_and_load()
+            config = find_and_load(variables=_variable_overrides)
         except (FileNotFoundError, FlowConfigError) as e:
             problems.append(f"config load failed: {e}")
 
@@ -1351,6 +1365,14 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
         description="Generic document flow processor.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {version('markstate')}")
+    parser.add_argument(
+        "-D",
+        "--variable",
+        metavar="NAME=VALUE",
+        action="append",
+        default=[],
+        help="Set a flow variable (repeatable; also MARKSTATE_VARIABLES).",
+    )
     parser.add_argument(
         "--focus",
         metavar="DIR",
@@ -1497,7 +1519,19 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    global _focus_override
+    global _focus_override, _variable_overrides
+    bootstrap = argparse.ArgumentParser(add_help=False)
+    bootstrap.add_argument("-D", "--variable", action="append", default=[])
+    bootstrap_args, _ = bootstrap.parse_known_args()
+    env_items = [item.strip() for item in os.environ.get(VARIABLES_ENV_VAR, "").split(",")]
+    env_items = [item for item in env_items if item]
+    try:
+        _variable_overrides = _parse_variable_items(env_items, VARIABLES_ENV_VAR)
+        _variable_overrides.update(_parse_variable_items(bootstrap_args.variable, "--variable"))
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        sys.exit(2)
+
     # doctor needs to run even when flow.yml is broken — skip the eager load.
     is_doctor = "doctor" in sys.argv[1:]
     try:
