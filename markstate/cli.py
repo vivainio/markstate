@@ -483,7 +483,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                 _apply_frontmatter_edits(
                     dest, entry.set_fields, entry.unset_fields, config.status_field
                 )
-                print(f"created {dest.relative_to(Path.cwd())}")
+                print(f"created {dest.relative_to(config.docs_root)}")
         elif isinstance(entry, ProducedDir):
             # Auto-create files inside existing directories matching the pattern.
             # Glob from docs_root, but only in dirs under the current directory.
@@ -502,7 +502,7 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                         _apply_frontmatter_edits(
                             dest, f.set_fields, f.unset_fields, config.status_field
                         )
-                        print(f"created {dest.relative_to(Path.cwd())}")
+                        print(f"created {dest.relative_to(config.docs_root)}")
 
 
 _USER_SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")

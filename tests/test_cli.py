@@ -309,6 +309,45 @@ def test_do_applies_move(tmp_path):
     assert "approved" in result.stdout
 
 
+def test_do_auto_creates_docs_when_flow_redirects(tmp_path: Path) -> None:
+    docs_repo = tmp_path / "docs-repo"
+    source_repo = tmp_path / "source-repo"
+    spec_dir = docs_repo / "specs" / "01-example"
+    spec_dir.mkdir(parents=True)
+    source_repo.mkdir()
+    setup_flow(
+        docs_repo,
+        SIMPLE_FLOW.replace(
+            "    gates:\n      - file: spec.md\n        status: approved\n",
+            """    gates:
+      - file: spec.md
+        status: approved
+    produces:
+      - file: summary.md
+        template: "# Summary\\n"
+        auto: true
+      - dir: specs/*
+        files:
+          - file: technical-spec.md
+            template: "# Technical spec\\n"
+            auto: true
+""",
+        ),
+    )
+    (source_repo / "flow.yml").write_text("redirect: ../docs-repo/flow.yml\n")
+    (docs_repo / "spec.md").write_text("---\nstatus: draft\n---\n# Spec\n")
+    focus_result = run(["focus", str(docs_repo)], source_repo)
+    assert focus_result.returncode == 0, focus_result.stderr
+
+    result = run(["do", "approve", "spec.md"], source_repo)
+
+    assert result.returncode == 0, result.stderr
+    assert (docs_repo / "summary.md").exists()
+    assert (spec_dir / "technical-spec.md").exists()
+    assert "created summary.md" in result.stdout
+    assert "created specs/01-example/technical-spec.md" in result.stdout
+
+
 def test_do_puts_status_first_in_frontmatter(tmp_path):
     setup_flow(tmp_path)
     # Status is NOT first in the input
