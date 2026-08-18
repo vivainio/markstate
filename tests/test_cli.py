@@ -496,6 +496,105 @@ def test_focus_fuzzy_no_match(tmp_path):
     assert "error" in result.stderr
 
 
+# --- vars ---
+
+
+def test_vars_empty_by_default(tmp_path):
+    setup_flow(tmp_path)
+    result = run(["vars"], tmp_path)
+    assert result.returncode == 0
+    assert "(none)" in result.stdout
+
+
+def test_vars_set_persists_and_shows(tmp_path):
+    setup_flow(tmp_path)
+    result = run(["vars", "skill=basflow"], tmp_path)
+    assert result.returncode == 0
+    assert "skill=basflow" in result.stdout
+    assert (tmp_path / ".markstate-variables").read_text() == "skill=basflow\n"
+
+    result2 = run(["vars"], tmp_path)
+    assert result2.returncode == 0
+    assert "skill=basflow" in result2.stdout
+
+
+def test_vars_unset_removes_file_when_empty(tmp_path):
+    setup_flow(tmp_path)
+    run(["vars", "skill=basflow"], tmp_path)
+    result = run(["vars", "--unset", "skill"], tmp_path)
+    assert result.returncode == 0
+    assert "(none)" in result.stdout
+    assert not (tmp_path / ".markstate-variables").exists()
+
+
+def test_vars_persisted_value_used_without_cli_flag(tmp_path):
+    (tmp_path / "flow.yml").write_text(
+        "$variables:\n"
+        "  skill:\n"
+        "    values: [a, b]\n"
+        "    default: a\n"
+        "use:\n"
+        "  $select: skill\n"
+        "  cases:\n"
+        "    a: ./a.yml\n"
+        "    b: ./b.yml\n"
+    )
+    (tmp_path / "a.yml").write_text(SIMPLE_FLOW)
+    (tmp_path / "b.yml").write_text(SIMPLE_FLOW.replace("drafting", "writing"))
+
+    run(["vars", "skill=b"], tmp_path)
+    result = run(["status"], tmp_path)
+    assert result.returncode == 0
+    assert "writing" in result.stdout
+
+
+def test_vars_cli_flag_overrides_persisted_value(tmp_path):
+    (tmp_path / "flow.yml").write_text(
+        "$variables:\n"
+        "  skill:\n"
+        "    values: [a, b]\n"
+        "    default: a\n"
+        "use:\n"
+        "  $select: skill\n"
+        "  cases:\n"
+        "    a: ./a.yml\n"
+        "    b: ./b.yml\n"
+    )
+    (tmp_path / "a.yml").write_text(SIMPLE_FLOW)
+    (tmp_path / "b.yml").write_text(SIMPLE_FLOW.replace("drafting", "writing"))
+
+    run(["vars", "skill=b"], tmp_path)
+    result = run(["-D", "skill=a", "status"], tmp_path)
+    assert result.returncode == 0
+    assert "drafting" in result.stdout
+
+
+def test_vars_can_set_still_missing_required_variable(tmp_path):
+    """The chicken-and-egg case: a flow with a required variable and no default
+    must still let `vars` set it, since finding .markstate-variables doesn't
+    require resolving the flow's own $variables/$select."""
+    (tmp_path / "flow.yml").write_text(
+        "$variables:\n"
+        "  skill:\n"
+        "    values: [a, b]\n"
+        "    required: true\n"
+        "use:\n"
+        "  $select: skill\n"
+        "  cases:\n"
+        "    a: ./a.yml\n"
+        "    b: ./b.yml\n"
+    )
+    (tmp_path / "a.yml").write_text(SIMPLE_FLOW)
+    (tmp_path / "b.yml").write_text(SIMPLE_FLOW)
+
+    result = run(["vars", "skill=a"], tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "skill=a" in result.stdout
+
+    result2 = run(["status"], tmp_path)
+    assert result2.returncode == 0, result2.stdout + result2.stderr
+
+
 # --- which ---
 
 
@@ -914,6 +1013,29 @@ def test_doctor_detects_broken_use(tmp_path):
     result = run(["doctor"], tmp_path)
     assert result.returncode == 1
     assert "use target missing" in result.stdout
+
+
+def test_doctor_resolves_select_use(tmp_path):
+    base = tmp_path / "base.yml"
+    base.write_text(SIMPLE_FLOW)
+    (tmp_path / "flow.yml").write_text(
+        "$variables:\n"
+        "  skill:\n"
+        "    values: [a, b]\n"
+        "    default: a\n"
+        "use:\n"
+        "  $select: skill\n"
+        "  cases:\n"
+        "    a: ./base.yml\n"
+        "    b: ./missing.yml\n"
+    )
+    result = run(["doctor"], tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert str(base) in result.stdout
+
+    result_b = run(["-D", "skill=b", "doctor"], tmp_path)
+    assert result_b.returncode == 1
+    assert "use target missing" in result_b.stdout
 
 
 def test_doctor_follows_redirect_chain(tmp_path):

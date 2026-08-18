@@ -30,11 +30,18 @@ from markstate.config import (
 )
 from markstate.config import _find as _find_flow
 from markstate.engine import TaskNotFoundError, TransitionError
-from markstate.schema import SCHEMA_VERSION, discover_flow_chain, find_flow_path, validate_flow
+from markstate.schema import (
+    SCHEMA_VERSION,
+    _selected_reference,
+    discover_flow_chain,
+    find_flow_path,
+    validate_flow,
+)
 
 FOCUS_FILE = ".markstate-focus"
 FOCUS_ENV_VAR = "MARKSTATE_FOCUS"
 VARIABLES_ENV_VAR = "MARKSTATE_VARIABLES"
+VARIABLES_FILE = ".markstate-variables"
 
 _PRED_RE = re.compile(r"^([a-zA-Z0-9_-]+)(>=|<=|!=|~=|>|<|=)(.+)$")
 _REL_AGO_RE = re.compile(r"^(\d+)([dwmy])$")
@@ -54,6 +61,37 @@ def _parse_variable_items(items: list[str], source: str) -> dict[str, str]:
             raise ValueError(f"{source} variable name cannot be empty")
         result[name] = value.strip()
     return result
+
+
+def _variables_root() -> Path | None:
+    """Directory holding the nearest flow.yml (same directory as FOCUS_FILE),
+    found without resolving any $variables/$select in it."""
+    path = _find_flow(Path.cwd())
+    return path.parent if path else None
+
+
+def _read_persisted_variables(root: Path) -> dict[str, str]:
+    path = root / VARIABLES_FILE
+    if not path.exists():
+        return {}
+    result: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        result[name.strip()] = value.strip()
+    return result
+
+
+def _write_persisted_variables(root: Path, values: dict[str, str]) -> None:
+    path = root / VARIABLES_FILE
+    if not values:
+        if path.exists():
+            path.unlink()
+        return
+    lines = [f"{name}={value}" for name, value in sorted(values.items())]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _parse_set_args(set_args: list[str]) -> dict[str, str]:
@@ -686,6 +724,33 @@ def _cmd_focus(args: argparse.Namespace) -> None:
     print(f"focus: {rel}")
 
 
+def _cmd_vars(args: argparse.Namespace) -> None:
+    root = _variables_root()
+    if root is None:
+        print(f"error: {CONFIG_FILENAME} not found", file=sys.stderr)
+        sys.exit(1)
+
+    persisted = _read_persisted_variables(root)
+
+    for name in args.unset:
+        persisted.pop(name, None)
+    if args.assignments:
+        try:
+            persisted.update(_parse_variable_items(args.assignments, "vars"))
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            sys.exit(2)
+
+    if args.assignments or args.unset:
+        _write_persisted_variables(root, persisted)
+
+    if not persisted:
+        print("(none)")
+        return
+    for name, value in sorted(persisted.items()):
+        print(f"{name}={value}")
+
+
 def _cmd_which(args: argparse.Namespace) -> None:
     config = _load_config()
     if args.query is None:
@@ -1256,7 +1321,11 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
         except yaml.YAMLError as e:
             problems.append(f"invalid YAML in {path}: {e}")
             break
-        redirect = raw.get("redirect")
+        redirect_raw = raw.get("redirect")
+        redirect = _selected_reference(redirect_raw, raw.get("$variables"), _variable_overrides)
+        if redirect_raw is not None and redirect is None:
+            problems.append(f"cannot resolve redirect target from supplied variables in {path}")
+            break
         if redirect:
             target = (path.parent / redirect).resolve()
             chain_lines.append(f"    redirect → {target}")
@@ -1267,7 +1336,12 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
             continue
         final = path
         if "use" in raw:
-            use_raw = raw["use"]
+            use_raw = _selected_reference(
+                raw["use"], raw.get("$variables"), _variable_overrides
+            )
+            if use_raw is None:
+                problems.append(f"cannot resolve use target from supplied variables in {path}")
+                break
             use_path = Path(use_raw).expanduser()
             if not use_path.is_absolute():
                 use_path = (path.parent / use_path).resolve()
@@ -1469,6 +1543,26 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     p = sub.add_parser("focus", help="Set or show the current task directory.")
     p.add_argument("directory", nargs="?", default=None)
 
+    # vars
+    p = sub.add_parser(
+        "vars",
+        help="Set, unset, or show persisted flow variables (.markstate-variables).",
+    )
+    p.add_argument(
+        "assignments",
+        metavar="NAME=VALUE",
+        nargs="*",
+        default=[],
+        help="Persist NAME=VALUE (repeatable). With no assignments and no --unset, show current values.",
+    )
+    p.add_argument(
+        "--unset",
+        metavar="NAME",
+        action="append",
+        default=[],
+        help="Remove a persisted variable (repeatable).",
+    )
+
     # which
     p = sub.add_parser(
         "which",
@@ -1572,15 +1666,24 @@ def main() -> None:
     bootstrap_args, _ = bootstrap.parse_known_args()
     env_items = [item.strip() for item in os.environ.get(VARIABLES_ENV_VAR, "").split(",")]
     env_items = [item for item in env_items if item]
+    # Precedence, lowest to highest: declared default < persisted (.markstate-variables)
+    # < MARKSTATE_VARIABLES env < -D/--variable. The persisted file is found by locating
+    # the nearest flow.yml directly, without resolving any $variables/$select in it, so
+    # a still-unset required variable can be set via `markstate vars` in the first place.
+    variables_root = _variables_root()
+    persisted_variables = _read_persisted_variables(variables_root) if variables_root else {}
     try:
-        _variable_overrides = _parse_variable_items(env_items, VARIABLES_ENV_VAR)
+        _variable_overrides = dict(persisted_variables)
+        _variable_overrides.update(_parse_variable_items(env_items, VARIABLES_ENV_VAR))
         _variable_overrides.update(_parse_variable_items(bootstrap_args.variable, "--variable"))
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         sys.exit(2)
 
     # Diagnostic commands need to run even when flow.yml is broken.
-    is_diagnostic = any(command in sys.argv[1:] for command in ("doctor", "validate"))
+    is_diagnostic = any(
+        command in sys.argv[1:] for command in ("doctor", "validate", "vars")
+    )
     try:
         config = None if is_diagnostic else _try_load_config()
     except SystemExit:
@@ -1602,6 +1705,7 @@ def main() -> None:
     dispatch = {
         "init": _cmd_init,
         "focus": _cmd_focus,
+        "vars": _cmd_vars,
         "which": _cmd_which,
         "set": _cmd_set,
         "update": _cmd_update,

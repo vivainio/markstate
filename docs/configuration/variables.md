@@ -23,6 +23,21 @@ MARKSTATE_VARIABLES="track=quick,platform=cloud" markstate status
 CLI values override `MARKSTATE_VARIABLES`, which overrides declared defaults.
 Unknown variables and values outside `values` are errors.
 
+## Persist a variable per project
+
+`-D`/`MARKSTATE_VARIABLES` are one-off, per-invocation overrides. To make a
+choice stick across invocations in one checkout, persist it instead:
+
+```bash
+markstate vars skill=basflow    # persist
+markstate vars                  # show what's persisted
+markstate vars --unset skill    # remove
+```
+
+This writes to `.markstate-variables` at the project root (alongside
+`.markstate-focus`). Full precedence, lowest to highest: declared `default` <
+`.markstate-variables` < `MARKSTATE_VARIABLES` env < `-D`/`--variable`.
+
 ## Select a base flow
 
 ```yaml

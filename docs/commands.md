@@ -1,7 +1,8 @@
 # Command reference
 
 Global options include `--focus DIR`, repeatable `-D NAME=VALUE` /
-`--variable NAME=VALUE`, and `--version`.
+`--variable NAME=VALUE`, and `--version`. Variables can also be persisted
+per-project with the [`vars`](#vars) command.
 
 ## `init`
 
@@ -100,6 +101,28 @@ markstate focus
 ```
 
 Focus is personal state stored in `.markstate-focus` at the project root.
+
+## `vars`
+
+Set, unset, or show persisted flow variables:
+
+```bash
+markstate vars                  # show current persisted variables
+markstate vars skill=basflow    # persist one or more NAME=VALUE
+markstate vars --unset skill    # remove a persisted variable
+```
+
+Persisted variables are personal state stored in `.markstate-variables` at the
+project root (same directory as `.markstate-focus`), one `NAME=VALUE` per
+line. They are found by locating the nearest `flow.yml` directly, without
+resolving any `$variables`/`$select` in it — so `vars` can set a variable's
+value even before it's been set for the first time, including one declared
+`required: true` with no default.
+
+Precedence (lowest to highest): declared `default` < `.markstate-variables` <
+`MARKSTATE_VARIABLES` env < `-D`/`--variable`. Use `vars` for a value that
+should stick across invocations in this project (e.g. "this checkout always
+uses the `basflow` skill"); use `-D`/`--variable` for a one-off override.
 
 ## `which`
 
