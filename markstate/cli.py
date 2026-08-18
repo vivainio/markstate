@@ -23,6 +23,7 @@ from markstate.config import (
     Phase,
     ProducedDir,
     ProducedDoc,
+    _validate_variable_names,
     filtered_rglob,
     find_and_load,
     find_flow_target,
@@ -82,6 +83,28 @@ def _read_persisted_variables(root: Path) -> dict[str, str]:
         name, _, value = line.partition("=")
         result[name.strip()] = value.strip()
     return result
+
+
+def _known_variable_definitions(
+    flow_path: Path, overrides: dict[str, str]
+) -> dict[str, tuple[dict, Path]]:
+    """Collect every $variables definition declared across the flow chain
+    reachable with *overrides*, keyed by name, alongside the path that
+    declared it. Best-effort: a redirect/use that can't yet be resolved (e.g.
+    it depends on a variable not set yet) just stops the walk there."""
+    paths, _ = discover_flow_chain(flow_path, overrides)
+    known: dict[str, tuple[dict, Path]] = {}
+    for path in paths:
+        try:
+            loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            continue
+        definitions = loaded.get("$variables") if isinstance(loaded, dict) else None
+        if isinstance(definitions, dict):
+            for name, definition in definitions.items():
+                if isinstance(definition, dict):
+                    known.setdefault(str(name), (definition, path))
+    return known
 
 
 def _write_persisted_variables(root: Path, values: dict[str, str]) -> None:
@@ -725,21 +748,56 @@ def _cmd_focus(args: argparse.Namespace) -> None:
 
 
 def _cmd_vars(args: argparse.Namespace) -> None:
-    root = _variables_root()
-    if root is None:
+    flow_path = _find_flow(Path.cwd())
+    if flow_path is None:
         print(f"error: {CONFIG_FILENAME} not found", file=sys.stderr)
         sys.exit(1)
+    root = flow_path.parent
 
     persisted = _read_persisted_variables(root)
 
+    if args.clear:
+        if persisted:
+            _write_persisted_variables(root, {})
+            print(f"cleared {len(persisted)} persisted variable(s)")
+        else:
+            print("(none)")
+        return
+
     for name in args.unset:
         persisted.pop(name, None)
+
     if args.assignments:
         try:
-            persisted.update(_parse_variable_items(args.assignments, "vars"))
+            new_values = _parse_variable_items(args.assignments, "vars")
         except ValueError as error:
             print(f"error: {error}", file=sys.stderr)
             sys.exit(2)
+
+        # Validate against variables actually declared in the flow chain, walked
+        # with the best overrides we have (persisted + env + -D, topped with the
+        # values being set now) so a $select on the variable being set can still
+        # unlock the right sub-flow's $variables.
+        effective = dict(_variable_overrides)
+        effective.update(persisted)
+        effective.update(new_values)
+        definitions = _known_variable_definitions(flow_path, effective)
+        try:
+            _validate_variable_names(new_values, set(definitions))
+            for name, value in new_values.items():
+                definition, path = definitions[name]
+                allowed = definition.get("values")
+                if allowed is not None and value not in [str(item) for item in allowed]:
+                    choices = ", ".join(str(item) for item in allowed)
+                    raise FlowConfigError(
+                        f"invalid value '{value}' for variable '{name}' in {path}; "
+                        f"expected one of: {choices}"
+                    )
+        except FlowConfigError as error:
+            print(f"error: {error}", file=sys.stderr)
+            sys.exit(2)
+
+        persisted.update(new_values)
 
     if args.assignments or args.unset:
         _write_persisted_variables(root, persisted)
@@ -1561,6 +1619,11 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="Remove a persisted variable (repeatable).",
+    )
+    p.add_argument(
+        "--clear",
+        action="store_true",
+        help="Remove all persisted variables.",
     )
 
     # which

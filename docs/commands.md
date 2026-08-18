@@ -110,14 +110,21 @@ Set, unset, or show persisted flow variables:
 markstate vars                  # show current persisted variables
 markstate vars skill=basflow    # persist one or more NAME=VALUE
 markstate vars --unset skill    # remove a persisted variable
+markstate vars --clear          # remove all persisted variables
 ```
 
 Persisted variables are personal state stored in `.markstate-variables` at the
 project root (same directory as `.markstate-focus`), one `NAME=VALUE` per
-line. They are found by locating the nearest `flow.yml` directly, without
-resolving any `$variables`/`$select` in it — so `vars` can set a variable's
-value even before it's been set for the first time, including one declared
-`required: true` with no default.
+line. Each name is checked against the `$variables` declared across the flow
+chain (following `use`/`redirect`, resolved with whatever's already known),
+and each value is checked against that variable's declared `values` list, if
+it has one — both rejected up front (with a "did you mean" suggestion for an
+unknown name close to a real one) rather than persisted, so a typo or bad
+value doesn't sit quietly in the file only to break every later command with
+an unrelated-looking error. Locating the `.markstate-variables` file itself
+doesn't require resolving the flow's own `$variables`/`$select`, though — so
+`vars` can still set a variable's value even before it's been set for the
+first time, including one declared `required: true` with no default.
 
 Precedence (lowest to highest): declared `default` < `.markstate-variables` <
 `MARKSTATE_VARIABLES` env < `-D`/`--variable`. Use `vars` for a value that

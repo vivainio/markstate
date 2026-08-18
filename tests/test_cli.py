@@ -506,8 +506,19 @@ def test_vars_empty_by_default(tmp_path):
     assert "(none)" in result.stdout
 
 
+def _setup_flow_with_skill_variable(tmp_path: Path) -> None:
+    setup_flow(
+        tmp_path,
+        "$variables:\n"
+        "  skill:\n"
+        "    values: [basflow, bas-spec]\n"
+        "    default: basflow\n"
+        + SIMPLE_FLOW,
+    )
+
+
 def test_vars_set_persists_and_shows(tmp_path):
-    setup_flow(tmp_path)
+    _setup_flow_with_skill_variable(tmp_path)
     result = run(["vars", "skill=basflow"], tmp_path)
     assert result.returncode == 0
     assert "skill=basflow" in result.stdout
@@ -519,11 +530,55 @@ def test_vars_set_persists_and_shows(tmp_path):
 
 
 def test_vars_unset_removes_file_when_empty(tmp_path):
-    setup_flow(tmp_path)
+    _setup_flow_with_skill_variable(tmp_path)
     run(["vars", "skill=basflow"], tmp_path)
     result = run(["vars", "--unset", "skill"], tmp_path)
     assert result.returncode == 0
     assert "(none)" in result.stdout
+    assert not (tmp_path / ".markstate-variables").exists()
+
+
+def test_vars_clear_removes_all_persisted(tmp_path):
+    _setup_flow_with_skill_variable(tmp_path)
+    run(["vars", "skill=basflow"], tmp_path)
+    result = run(["vars", "--clear"], tmp_path)
+    assert result.returncode == 0
+    assert not (tmp_path / ".markstate-variables").exists()
+
+    result2 = run(["vars"], tmp_path)
+    assert result2.returncode == 0
+    assert "(none)" in result2.stdout
+
+
+def test_vars_clear_on_already_empty_reports_none(tmp_path):
+    setup_flow(tmp_path)
+    result = run(["vars", "--clear"], tmp_path)
+    assert result.returncode == 0
+    assert "(none)" in result.stdout
+
+
+def test_vars_rejects_unknown_variable(tmp_path):
+    setup_flow(tmp_path)
+    result = run(["vars", "nope=1"], tmp_path)
+    assert result.returncode != 0
+    assert "unknown variable 'nope'" in result.stderr
+    assert not (tmp_path / ".markstate-variables").exists()
+
+
+def test_vars_rejects_unknown_variable_suggests_close_match(tmp_path):
+    _setup_flow_with_skill_variable(tmp_path)
+    result = run(["vars", "skil=basflow"], tmp_path)
+    assert result.returncode != 0
+    assert "did you mean 'skill'" in result.stderr
+    assert not (tmp_path / ".markstate-variables").exists()
+
+
+def test_vars_rejects_value_outside_declared_values(tmp_path):
+    _setup_flow_with_skill_variable(tmp_path)
+    result = run(["vars", "skill=nonsense"], tmp_path)
+    assert result.returncode != 0
+    assert "invalid value 'nonsense' for variable 'skill'" in result.stderr
+    assert "expected one of: basflow, bas-spec" in result.stderr
     assert not (tmp_path / ".markstate-variables").exists()
 
 

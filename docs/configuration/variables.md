@@ -31,11 +31,14 @@ choice stick across invocations in one checkout, persist it instead:
 ```bash
 markstate vars skill=basflow    # persist
 markstate vars                  # show what's persisted
-markstate vars --unset skill    # remove
+markstate vars --unset skill    # remove one
+markstate vars --clear          # remove all
 ```
 
 This writes to `.markstate-variables` at the project root (alongside
-`.markstate-focus`). Full precedence, lowest to highest: declared `default` <
+`.markstate-focus`). Like `-D`/`MARKSTATE_VARIABLES`, an unknown variable name
+or a value outside its declared `values` is rejected rather than persisted.
+Full precedence, lowest to highest: declared `default` <
 `.markstate-variables` < `MARKSTATE_VARIABLES` env < `-D`/`--variable`.
 
 ## Select a base flow
