@@ -278,6 +278,47 @@ def find_flow_target(start: Path | None = None, variables: dict[str, str] | None
         path = target
 
 
+def find_flow_target_best_effort(
+    start: Path | None = None, variables: dict[str, str] | None = None
+) -> Path | None:
+    """Like find_flow_target, but never raises: follows the redirect chain as
+    far as it can be resolved with *variables*, and returns the deepest flow
+    file reached. On a hop that would need a variable it doesn't have, a
+    broken redirect target, or a cycle, resolution just stops at that hop's
+    flow file instead of failing.
+
+    Returns None only if no flow.yml is found upward from start.
+    """
+    path = _find(start or Path.cwd())
+    if path is None:
+        return None
+    seen: set[Path] = set()
+    overrides = variables or {}
+    known: set[str] = set()
+    while True:
+        resolved = path.resolve()
+        if resolved in seen:
+            return path
+        seen.add(resolved)
+        try:
+            loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            return path
+        if not isinstance(loaded, dict):
+            return path
+        try:
+            raw = _resolve_selects(loaded, overrides, path, known)
+        except FlowConfigError:
+            return path
+        redirect = raw.get("redirect")
+        if not redirect:
+            return path
+        target = _resolve_relative(path, redirect)
+        if not target.exists():
+            return path
+        path = target
+
+
 def has_use(path: Path) -> bool:
     """Return True if the flow file at *path* contains a ``use:`` directive."""
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}

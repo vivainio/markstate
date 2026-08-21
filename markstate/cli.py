@@ -27,6 +27,7 @@ from markstate.config import (
     filtered_rglob,
     find_and_load,
     find_flow_target,
+    find_flow_target_best_effort,
     has_use,
 )
 from markstate.config import _find as _find_flow
@@ -49,6 +50,9 @@ _REL_AGO_RE = re.compile(r"^(\d+)([dwmy])$")
 
 _focus_override: str | None = None
 _variable_overrides: dict[str, str] = {}
+# env/-D overrides only (no persisted values) -- the stable basis used to locate
+# .markstate-variables itself, so that location never depends on its own contents.
+_env_cli_overrides: dict[str, str] = {}
 
 
 def _parse_variable_items(items: list[str], source: str) -> dict[str, str]:
@@ -64,11 +68,18 @@ def _parse_variable_items(items: list[str], source: str) -> dict[str, str]:
     return result
 
 
-def _variables_root() -> Path | None:
-    """Directory holding the nearest flow.yml (same directory as FOCUS_FILE),
-    found without resolving any $variables/$select in it."""
-    path = _find_flow(Path.cwd())
-    return path.parent if path else None
+def _variables_root(overrides: dict[str, str]) -> Path | None:
+    """Directory holding .markstate-variables.
+
+    Follows the redirect chain the same way FOCUS_FILE's root does, using
+    only *overrides* (env/-D, never persisted values -- see
+    _env_cli_overrides) to resolve $select, as far as it can go. A hop gated
+    by a still-unset required variable stops the walk at that hop's flow.yml
+    rather than falling all the way back to the first one, so `markstate
+    vars` sets the variable right where it's declared.
+    """
+    target = find_flow_target_best_effort(Path.cwd(), variables=overrides)
+    return target.parent if target else None
 
 
 def _read_persisted_variables(root: Path) -> dict[str, str]:
@@ -752,7 +763,7 @@ def _cmd_vars(args: argparse.Namespace) -> None:
     if flow_path is None:
         print(f"error: {CONFIG_FILENAME} not found", file=sys.stderr)
         sys.exit(1)
-    root = flow_path.parent
+    root = _variables_root(_env_cli_overrides) or flow_path.parent
 
     persisted = _read_persisted_variables(root)
 
@@ -1723,25 +1734,30 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    global _focus_override, _variable_overrides
+    global _focus_override, _variable_overrides, _env_cli_overrides
     bootstrap = argparse.ArgumentParser(add_help=False)
     bootstrap.add_argument("-D", "--variable", action="append", default=[])
     bootstrap_args, _ = bootstrap.parse_known_args()
     env_items = [item.strip() for item in os.environ.get(VARIABLES_ENV_VAR, "").split(",")]
     env_items = [item for item in env_items if item]
     # Precedence, lowest to highest: declared default < persisted (.markstate-variables)
-    # < MARKSTATE_VARIABLES env < -D/--variable. The persisted file is found by locating
-    # the nearest flow.yml directly, without resolving any $variables/$select in it, so
-    # a still-unset required variable can be set via `markstate vars` in the first place.
-    variables_root = _variables_root()
-    persisted_variables = _read_persisted_variables(variables_root) if variables_root else {}
+    # < MARKSTATE_VARIABLES env < -D/--variable. .markstate-variables' location is resolved
+    # using only the env/-D overrides (never persisted values, which would make the
+    # location depend on its own contents), following any redirect chain when that can be
+    # done with what's known so far. If it can't -- e.g. a redirect gated by a still-unset
+    # required variable -- it falls back to the nearest flow.yml directly, so a still-unset
+    # required variable can be set via `markstate vars` in the first place.
     try:
-        _variable_overrides = dict(persisted_variables)
-        _variable_overrides.update(_parse_variable_items(env_items, VARIABLES_ENV_VAR))
-        _variable_overrides.update(_parse_variable_items(bootstrap_args.variable, "--variable"))
+        _env_cli_overrides = _parse_variable_items(env_items, VARIABLES_ENV_VAR)
+        _env_cli_overrides.update(_parse_variable_items(bootstrap_args.variable, "--variable"))
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         sys.exit(2)
+
+    variables_root = _variables_root(_env_cli_overrides)
+    persisted_variables = _read_persisted_variables(variables_root) if variables_root else {}
+    _variable_overrides = dict(persisted_variables)
+    _variable_overrides.update(_env_cli_overrides)
 
     # Diagnostic commands need to run even when flow.yml is broken.
     is_diagnostic = any(

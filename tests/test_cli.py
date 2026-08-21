@@ -650,6 +650,99 @@ def test_vars_can_set_still_missing_required_variable(tmp_path):
     assert result2.returncode == 0, result2.stdout + result2.stderr
 
 
+def test_vars_follows_redirect_next_to_focus(tmp_path: Path) -> None:
+    """.markstate-variables should live beside .markstate-focus (config.root),
+    even when the local flow.yml just redirects to another repo's flow.yml."""
+    docs_repo = tmp_path / "docs-repo"
+    source_repo = tmp_path / "source-repo"
+    docs_repo.mkdir()
+    source_repo.mkdir()
+    _setup_flow_with_skill_variable(docs_repo)
+    (source_repo / "flow.yml").write_text("redirect: ../docs-repo/flow.yml\n")
+
+    result = run(["status"], source_repo)
+    assert result.returncode == 0
+    assert str(docs_repo) in result.stdout  # config.root == FOCUS_FILE's directory
+
+    result = run(["vars", "skill=bas-spec"], source_repo)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (docs_repo / ".markstate-variables").read_text() == "skill=bas-spec\n"
+    assert not (source_repo / ".markstate-variables").exists()
+
+
+def test_vars_still_local_when_redirect_gated_by_unset_variable(tmp_path: Path) -> None:
+    """When the redirect itself depends on a required variable that isn't set
+    yet, `vars` must fall back to the local flow.yml so it can be set there
+    in the first place -- the same chicken-and-egg case as for `use:`."""
+    a_repo = tmp_path / "a-repo"
+    b_repo = tmp_path / "b-repo"
+    source_repo = tmp_path / "source-repo"
+    a_repo.mkdir()
+    b_repo.mkdir()
+    source_repo.mkdir()
+    setup_flow(a_repo)
+    setup_flow(b_repo)
+    (source_repo / "flow.yml").write_text(
+        "$variables:\n"
+        "  target:\n"
+        "    values: [a, b]\n"
+        "    required: true\n"
+        "redirect:\n"
+        "  $select: target\n"
+        "  cases:\n"
+        "    a: ../a-repo/flow.yml\n"
+        "    b: ../b-repo/flow.yml\n"
+    )
+
+    result = run(["vars", "target=a"], source_repo)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (source_repo / ".markstate-variables").read_text() == "target=a\n"
+
+    result = run(["status"], source_repo)
+    assert result.returncode == 0
+    assert str(a_repo) in result.stdout
+
+
+def test_vars_stops_at_first_hop_that_needs_a_variable(tmp_path: Path) -> None:
+    """A multi-hop redirect chain should resolve as far as it can: the first
+    hop redirects unconditionally and is followed, the second hop is gated by
+    a still-unset required variable and is where the walk stops -- not the
+    original source flow.yml."""
+    a_repo = tmp_path / "a-repo"
+    b_repo = tmp_path / "b-repo"
+    mid_repo = tmp_path / "mid-repo"
+    source_repo = tmp_path / "source-repo"
+    a_repo.mkdir()
+    b_repo.mkdir()
+    mid_repo.mkdir()
+    source_repo.mkdir()
+    setup_flow(a_repo)
+    setup_flow(b_repo)
+    (mid_repo / "flow.yml").write_text(
+        "$variables:\n"
+        "  target:\n"
+        "    values: [a, b]\n"
+        "    required: true\n"
+        "redirect:\n"
+        "  $select: target\n"
+        "  cases:\n"
+        "    a: ../a-repo/flow.yml\n"
+        "    b: ../b-repo/flow.yml\n"
+    )
+    (source_repo / "flow.yml").write_text("redirect: ../mid-repo/flow.yml\n")
+
+    result = run(["vars", "target=b"], source_repo)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (mid_repo / ".markstate-variables").read_text() == "target=b\n"
+    assert not (source_repo / ".markstate-variables").exists()
+    assert not (a_repo / ".markstate-variables").exists()
+    assert not (b_repo / ".markstate-variables").exists()
+
+    result = run(["status"], source_repo)
+    assert result.returncode == 0
+    assert str(b_repo) in result.stdout
+
+
 # --- which ---
 
 
