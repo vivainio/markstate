@@ -29,7 +29,7 @@ Unknown variables and values outside `values` are errors.
 choice stick across invocations in one checkout, persist it instead:
 
 ```bash
-markstate vars skill=basflow    # persist
+markstate vars skill=myflow    # persist
 markstate vars                  # show what's persisted
 markstate vars --unset skill    # remove one
 markstate vars --clear          # remove all

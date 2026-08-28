@@ -108,7 +108,7 @@ Set, unset, or show persisted flow variables:
 
 ```bash
 markstate vars                  # show current persisted variables
-markstate vars skill=basflow    # persist one or more NAME=VALUE
+markstate vars skill=myflow    # persist one or more NAME=VALUE
 markstate vars --unset skill    # remove a persisted variable
 markstate vars --clear          # remove all persisted variables
 ```
@@ -129,7 +129,7 @@ first time, including one declared `required: true` with no default.
 Precedence (lowest to highest): declared `default` < `.markstate-variables` <
 `MARKSTATE_VARIABLES` env < `-D`/`--variable`. Use `vars` for a value that
 should stick across invocations in this project (e.g. "this checkout always
-uses the `basflow` skill"); use `-D`/`--variable` for a one-off override.
+uses the `myflow` skill"); use `-D`/`--variable` for a one-off override.
 
 ## `which`
 
