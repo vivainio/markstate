@@ -11,6 +11,7 @@ Ready-made flows and agent skills live in the repository:
 | [Shared flow](https://github.com/vivainio/markstate/tree/main/examples/shared-flow) | Canonical flow shared across repositories |
 | [Hook fallback](https://github.com/vivainio/markstate/tree/main/examples/use-fallback) | Shared flow with fallback hooks |
 | [Skill-provided flow](https://github.com/vivainio/markstate/tree/main/examples/skill-provided-flow) | Import a workflow bundled with an installed agent skill |
+| [AI-native SDLC](https://github.com/vivainio/markstate/tree/main/examples/ai-native-sdlc) | Intent → spec → plan → evals → review, modeled on Anthropic's AI-native SDLC playbook |
 
 Each example includes a `flow.yml`. Several also have a matching skill under
 [`skills/`](https://github.com/vivainio/markstate/tree/main/skills) to guide an

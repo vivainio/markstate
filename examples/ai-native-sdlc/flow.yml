@@ -1,0 +1,197 @@
+# AI-native SDLC flow, modeled on Anthropic's "AI-Native SDLC Playbook"
+# (https://claude.com/blog/the-ai-native-sdlc-playbook).
+#
+# Each of the playbook's six stages becomes a markstate phase; each stage's
+# artifact (intent.md, spec.md, plan.md, evals.md, review.md) becomes a
+# tracked document with its own draft -> approved lifecycle. Gates enforce
+# that a stage's artifact can't exist until the previous one is approved,
+# matching the playbook's "each stage commits an artifact the next stage
+# reads" model.
+#
+# Directory layout:
+#   changes/
+#     add-oauth-login/
+#       intent.md    # Plan   - captured intent
+#       spec.md      # Design - requirements + technical design
+#       plan.md      # Build  - implementation plan + task checklist
+#       evals.md      # Test   - feedback loops / eval sign-off
+#       review.md    # Deploy - PR review + release approval
+#
+# Use `markstate new changes/add-oauth-login` to start a new change.
+# Use `markstate focus add-oauth-login` to work on a specific change.
+#
+# See README.md in this directory for the full stage-by-stage mapping and a
+# worked demo, including how the `maintain` stage closes the loop by filing
+# a fresh intent.md.
+
+_anchors:
+  creation: &creation
+    once-created-at: now
+    once-created-by: me
+  approval: &approval
+    approved-at: now
+    approved-by: me
+    once-first-approved-at: now
+
+phases:
+  - name: plan
+    description: Capture intent as a version-controlled artifact
+    produces:
+      - dir: changes/<change>
+        files:
+          - file: intent.md
+            template: |
+              ---
+              status: draft
+              ---
+
+              # Intent
+
+              ## Problem
+
+              <!-- What pain point or opportunity triggered this? -->
+
+              ## Desired outcome
+
+              <!-- What does success look like? -->
+            set: *creation
+    advance_when:
+      - file: intent.md
+        status: approved
+
+  - name: design
+    description: Collapse requirements and technical design into one artifact
+    gates:
+      - file: intent.md
+        status: approved
+    produces:
+      - file: spec.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Specification
+
+          ## Functional requirements
+
+          <!-- What must the solution do? -->
+
+          ## Technical design
+
+          <!-- How will it be built? -->
+
+          ## Policy review
+
+          <!-- Flags raised by security / compliance / brand skills. -->
+        auto: true
+        set: *creation
+    advance_when:
+      - file: spec.md
+        status: approved
+
+  - name: build
+    description: Plan mode, then implementation against the approved plan
+    gates:
+      - file: spec.md
+        status: approved
+    produces:
+      - file: plan.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Implementation plan
+
+          ## Approach
+
+          <!-- Files, modules, and sequencing. -->
+
+          ## Tasks
+
+          <!-- Each item is a work unit, checked off as it lands.
+               Examples:
+                 - [ ] Add OAuth callback route
+                 - [ ] Store refresh tokens
+                 - [ ] Update login UI -->
+
+          - [ ]
+        auto: true
+        set: *creation
+    advance_when:
+      - file: plan.md
+        status: approved
+      - file: plan.md
+        tasks: all_done
+
+  - name: test
+    description: Feedback loops and eval sign-off before human review
+    gates:
+      - file: plan.md
+        status: approved
+      - file: plan.md
+        tasks: all_done
+    produces:
+      - file: evals.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Test & eval sign-off
+
+          ## Feedback loops run
+
+          <!-- make test, build, visual checks -->
+
+          ## Eval results
+
+          <!-- Pass rate against the regression eval set. -->
+        auto: true
+        set: *creation
+    advance_when:
+      - file: evals.md
+        status: approved
+
+  - name: deploy
+    description: PR review and release approval gate
+    gates:
+      - file: evals.md
+        status: approved
+    produces:
+      - file: review.md
+        template: |
+          ---
+          status: draft
+          ---
+
+          # Review & release
+
+          ## Findings
+
+          <!-- Ranked Important / Nit. -->
+
+          ## Release authorization
+
+          <!-- Who approved, and under what change ticket. -->
+        auto: true
+        set: *creation
+    advance_when:
+      - file: review.md
+        status: approved
+
+  - name: maintain
+    description: Deployed and monitored; control-band breaches file a new intent.md
+    gates:
+      - file: review.md
+        status: approved
+
+transitions:
+  - name: approve
+    from: draft
+    to: approved
+    set: *approval
+  - name: reopen
+    from: approved
+    to: draft
