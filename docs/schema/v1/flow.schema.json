@@ -14,6 +14,7 @@
       "description": "Base flow to load before applying local overrides.",
       "oneOf": [
         { "$ref": "#/$defs/path" },
+        { "$ref": "#/$defs/pathList" },
         { "$ref": "#/$defs/select" }
       ]
     },
@@ -21,6 +22,7 @@
       "description": "Complete flow to which loading is transferred.",
       "oneOf": [
         { "$ref": "#/$defs/path" },
+        { "$ref": "#/$defs/pathList" },
         { "$ref": "#/$defs/select" }
       ]
     },
@@ -79,6 +81,12 @@
     "path": {
       "type": "string",
       "minLength": 1
+    },
+    "pathList": {
+      "description": "Candidate paths tried in order; the first that exists wins.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/path" },
+      "minItems": 1
     },
     "variable": {
       "type": "object",
