@@ -751,6 +751,57 @@ def test_use_tilde_expansion(tmp_path, monkeypatch):
     assert cfg.root == project
 
 
+def test_use_glob_picks_newest_version(tmp_path):
+    """use: with a wildcard picks the highest version-sorted match."""
+    skills = tmp_path / "skills"
+    for version in ("0.3.4", "0.10.0", "0.9.0"):
+        resources = skills / version / "resources"
+        resources.mkdir(parents=True)
+        (resources / "flow.yml").write_text(
+            f"status_field: v{version}\nphases: []\ntransitions: []\n"
+        )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text("use: ../skills/*/resources/flow.yml\n")
+
+    cfg = find_and_load(project)
+    # 0.10.0 must win over 0.9.0 (numeric, not lexical, comparison) and 0.3.4.
+    assert cfg.status_field == "v0.10.0"
+
+
+def test_use_glob_tilde_expansion(tmp_path, monkeypatch):
+    """use: glob patterns expand ~ before matching, mirroring plugin cache
+    layouts like ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/..."""
+    fake_home = tmp_path / "home"
+    base = fake_home / ".claude" / "plugins" / "cache" / "example-marketplace" / "example-plugin"
+    for version in ("0.3.4", "0.4.0"):
+        resources = base / version / "skills" / "example-skill" / "resources"
+        resources.mkdir(parents=True)
+        (resources / "flow.yml").write_text("phases: []\ntransitions: []\n")
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text(
+        "use: ~/.claude/plugins/cache/example-marketplace/example-plugin/*/skills/"
+        "example-skill/resources/flow.yml\n"
+    )
+
+    cfg = find_and_load(project)
+    assert cfg.root == project
+
+
+def test_use_glob_no_match_raises(tmp_path):
+    """use: with a wildcard that matches nothing raises like a plain missing use target."""
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text("use: ../skills/*/resources/flow.yml\n")
+
+    with pytest.raises(FlowConfigError, match="use target not found"):
+        find_and_load(project)
+
+
 def test_use_local_status_field_overrides(tmp_path):
     """Local status_field takes precedence over imported one."""
     shared = tmp_path / "shared"

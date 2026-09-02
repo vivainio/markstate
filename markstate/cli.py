@@ -29,6 +29,7 @@ from markstate.config import (
     find_flow_target,
     find_flow_target_best_effort,
     has_use,
+    resolve_use_reference,
 )
 from markstate.config import _find as _find_flow
 from markstate.engine import TaskNotFoundError, TransitionError
@@ -1411,9 +1412,7 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
             if use_raw is None:
                 problems.append(f"cannot resolve use target from supplied variables in {path}")
                 break
-            use_path = Path(use_raw).expanduser()
-            if not use_path.is_absolute():
-                use_path = (path.parent / use_path).resolve()
+            use_path = resolve_use_reference(path, use_raw)
             chain_lines.append(
                 f"    use: {use_raw} → {use_path}{_link_note(use_path)}{_age_suffix(use_path)}"
             )

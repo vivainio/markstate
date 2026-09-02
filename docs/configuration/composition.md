@@ -41,6 +41,29 @@ Every environment that runs the project must install the skill at the same
 path. For self-contained or hermetic builds, keep the shared flow in the
 repository instead.
 
+### Match a version-numbered install with a wildcard
+
+Plugin managers often keep an installed skill under a version-numbered
+directory and bump that directory on update, e.g.
+
+```text
+~/.claude/plugins/cache/<marketplace>/<plugin>/0.3.4/skills/<skill>/resources/flow.yml
+```
+
+Since the exact version segment isn't known ahead of time (and changes on
+every update), `use:` accepts glob wildcards (`*`, `?`, `[...]`) in place of
+it:
+
+```yaml
+use: ~/.claude/plugins/cache/<marketplace>/<plugin>/*/skills/<skill>/resources/flow.yml
+```
+
+When the pattern matches more than one installed version, markstate picks
+the highest one using a version-aware sort (numeric runs compare as
+integers, so `0.10.0` sorts after `0.9.0` rather than before it, unlike a
+plain string sort). A pattern that matches nothing is an error, same as a
+plain `use:` path that doesn't exist.
+
 ## Hooks
 
 A `flow_hooks.py` file beside a `flow.yml` can observe and veto transitions.

@@ -1,6 +1,7 @@
 """Load and validate flow.yml, walking up from cwd to find it."""
 
 import difflib
+import glob as glob_module
 import importlib.util
 import re
 import subprocess
@@ -39,6 +40,49 @@ def resolve_flow_reference(flow_path: Path, reference: str) -> Path:
     if expanded.is_absolute():
         return expanded.resolve()
     return _resolve_relative(flow_path, reference)
+
+
+_GLOB_MAGIC = re.compile(r"[*?\[]")
+
+
+def _has_glob_magic(pattern: str) -> bool:
+    return bool(_GLOB_MAGIC.search(pattern))
+
+
+def _natural_sort_key(text: str) -> list[int | str]:
+    """Split *text* into digit/non-digit runs so digit runs compare
+    numerically -- e.g. ``1.10.0`` sorts after ``1.9.0`` rather than before
+    it, as a plain string comparison would."""
+    return [int(chunk) if chunk.isdigit() else chunk for chunk in re.split(r"(\d+)", text)]
+
+
+def resolve_use_reference(flow_path: Path, reference: str) -> Path:
+    """Resolve a ``use:`` reference to a concrete flow file path.
+
+    *reference* may contain glob wildcards (``*``, ``?``, ``[...]``) to cover
+    version-numbered install directories -- e.g. installed Claude Code
+    skills/plugins that keep several versions side by side, such as
+    ``~/.claude/skills/my-workflow-*/resources/flow.yml``. When the pattern
+    matches more than one existing file, the candidates are ranked with a
+    natural/version-aware sort (see ``_natural_sort_key``) and the
+    highest-ranked one wins.
+
+    A reference without wildcards resolves exactly as a plain path (and is
+    not required to exist -- the caller checks that).  A wildcarded
+    reference that matches nothing also returns a (non-existent) path built
+    from the pattern, so callers can report it the same way.
+    """
+    expanded = Path(reference).expanduser()
+    if not _has_glob_magic(str(expanded)):
+        if expanded.is_absolute():
+            return expanded
+        return _resolve_relative(flow_path, str(expanded))
+
+    full_pattern = str(expanded) if expanded.is_absolute() else str(flow_path.parent / expanded)
+    matches = [Path(m) for m in glob_module.glob(full_pattern, recursive=True) if Path(m).is_file()]
+    if not matches:
+        return Path(full_pattern)
+    return max(matches, key=lambda p: _natural_sort_key(str(p)))
 
 
 def _main_worktree_anchor(parent: Path) -> Path | None:
@@ -349,9 +393,7 @@ def _load(path: Path, variables: dict[str, str], known: set[str]) -> FlowConfig:
     hook_dirs: tuple[Path, ...] = (config_dir,)
 
     if "use" in raw:
-        use_path = Path(raw["use"]).expanduser()
-        if not use_path.is_absolute():
-            use_path = _resolve_relative(path, str(use_path))
+        use_path = resolve_use_reference(path, raw["use"])
         if not use_path.exists():
             raise FlowConfigError(f"use target not found: {use_path} (referenced from {path})")
         loaded_base = yaml.safe_load(use_path.read_text(encoding="utf-8")) or {}
