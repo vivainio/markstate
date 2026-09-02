@@ -29,7 +29,7 @@ from markstate.config import (
     find_flow_target,
     find_flow_target_best_effort,
     has_use,
-    resolve_use_reference,
+    resolve_glob_reference,
 )
 from markstate.config import _find as _find_flow
 from markstate.engine import TaskNotFoundError, TransitionError
@@ -1397,7 +1397,7 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
             problems.append(f"cannot resolve redirect target from supplied variables in {path}")
             break
         if redirect:
-            target = (path.parent / redirect).resolve()
+            target = resolve_glob_reference(path, redirect)
             chain_lines.append(f"    redirect → {target}")
             if not target.exists():
                 problems.append(f"redirect target missing: {target} (from {path})")
@@ -1412,7 +1412,7 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
             if use_raw is None:
                 problems.append(f"cannot resolve use target from supplied variables in {path}")
                 break
-            use_path = resolve_use_reference(path, use_raw)
+            use_path = resolve_glob_reference(path, use_raw)
             chain_lines.append(
                 f"    use: {use_raw} → {use_path}{_link_note(use_path)}{_age_suffix(use_path)}"
             )

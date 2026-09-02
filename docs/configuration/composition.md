@@ -64,6 +64,8 @@ integers, so `0.10.0` sorts after `0.9.0` rather than before it, unlike a
 plain string sort). A pattern that matches nothing is an error, same as a
 plain `use:` path that doesn't exist.
 
+`redirect:` (below) accepts the same wildcards and version-aware selection.
+
 ## Hooks
 
 A `flow_hooks.py` file beside a `flow.yml` can observe and veto transitions.
@@ -117,6 +119,10 @@ redirect: ../docs-repo/flow.yml
 
 Use redirect stubs when several source repositories share one authoritative
 flow. Relative paths are resolved from the file containing `redirect`.
+
+Like `use:`, `redirect:` accepts glob wildcards and resolves a
+version-numbered match to the newest one — see
+[Match a version-numbered install with a wildcard](#match-a-version-numbered-install-with-a-wildcard).
 
 ## Scope phases to directory trees
 

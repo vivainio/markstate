@@ -331,6 +331,23 @@ def test_redirect_loads_target(tmp_path):
     assert cfg.phases == []
 
 
+def test_redirect_glob_picks_newest_version(tmp_path):
+    """redirect: with a wildcard picks the highest version-sorted match,
+    same as use: (see test_use_glob_picks_newest_version)."""
+    docs_repos = tmp_path / "docs-repos"
+    for version in ("0.3.4", "0.10.0", "0.9.0"):
+        target = docs_repos / version
+        target.mkdir(parents=True)
+        (target / "flow.yml").write_text(f"status_field: v{version}\nphases: []\ntransitions: []\n")
+
+    source_repo = tmp_path / "source-repo"
+    source_repo.mkdir()
+    (source_repo / "flow.yml").write_text("redirect: ../docs-repos/*/flow.yml\n")
+
+    cfg = find_and_load(source_repo)
+    assert cfg.status_field == "v0.10.0"
+
+
 def test_status_field_custom(tmp_path):
     write_flow(tmp_path, "status_field: state\nphases: []\ntransitions: []\n")
     cfg = find_and_load(tmp_path)

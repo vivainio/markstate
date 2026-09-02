@@ -34,14 +34,6 @@ def _resolve_relative(flow_path: Path, rel: str) -> Path:
     return (anchor / rel).resolve()
 
 
-def resolve_flow_reference(flow_path: Path, reference: str) -> Path:
-    """Resolve a path referenced by a flow file, including ``~`` paths."""
-    expanded = Path(reference).expanduser()
-    if expanded.is_absolute():
-        return expanded.resolve()
-    return _resolve_relative(flow_path, reference)
-
-
 _GLOB_MAGIC = re.compile(r"[*?\[]")
 
 
@@ -56,8 +48,9 @@ def _natural_sort_key(text: str) -> list[int | str]:
     return [int(chunk) if chunk.isdigit() else chunk for chunk in re.split(r"(\d+)", text)]
 
 
-def resolve_use_reference(flow_path: Path, reference: str) -> Path:
-    """Resolve a ``use:`` reference to a concrete flow file path.
+def resolve_glob_reference(flow_path: Path, reference: str) -> Path:
+    """Resolve a ``use:`` or ``redirect:`` reference to a concrete flow file
+    path.
 
     *reference* may contain glob wildcards (``*``, ``?``, ``[...]``) to cover
     version-numbered install directories -- e.g. installed Claude Code
@@ -316,7 +309,7 @@ def find_flow_target(start: Path | None = None, variables: dict[str, str] | None
         if not redirect:
             _validate_variable_names(overrides, known)
             return path
-        target = _resolve_relative(path, redirect)
+        target = resolve_glob_reference(path, redirect)
         if not target.exists():
             raise FlowConfigError(f"redirect target not found: {target} (referenced from {path})")
         path = target
@@ -357,7 +350,7 @@ def find_flow_target_best_effort(
         redirect = raw.get("redirect")
         if not redirect:
             return path
-        target = _resolve_relative(path, redirect)
+        target = resolve_glob_reference(path, redirect)
         if not target.exists():
             return path
         path = target
@@ -384,7 +377,7 @@ def _load(path: Path, variables: dict[str, str], known: set[str]) -> FlowConfig:
         raise FlowConfigError(f"flow must be a mapping: {path}")
     raw = _resolve_selects(loaded, variables, path, known)
     if "redirect" in raw:
-        target = _resolve_relative(path, raw["redirect"])
+        target = resolve_glob_reference(path, raw["redirect"])
         if not target.exists():
             raise FlowConfigError(f"redirect target not found: {target} (referenced from {path})")
         return _load(target, variables, known)
@@ -393,7 +386,7 @@ def _load(path: Path, variables: dict[str, str], known: set[str]) -> FlowConfig:
     hook_dirs: tuple[Path, ...] = (config_dir,)
 
     if "use" in raw:
-        use_path = resolve_use_reference(path, raw["use"])
+        use_path = resolve_glob_reference(path, raw["use"])
         if not use_path.exists():
             raise FlowConfigError(f"use target not found: {use_path} (referenced from {path})")
         loaded_base = yaml.safe_load(use_path.read_text(encoding="utf-8")) or {}

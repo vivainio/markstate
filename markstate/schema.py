@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from markstate.config import CONFIG_FILENAME, HIDDEN_CONFIG_PATH, resolve_flow_reference
+from markstate.config import CONFIG_FILENAME, HIDDEN_CONFIG_PATH, resolve_glob_reference
 
 SCHEMA_VERSION = "v1"
 
@@ -65,7 +65,7 @@ def discover_flow_chain(
         reference = loaded.get("redirect") or loaded.get("use")
         target = _selected_reference(reference, loaded.get("$variables"), overrides)
         if target is not None:
-            visit(resolve_flow_reference(path, target))
+            visit(resolve_glob_reference(path, target))
         elif reference is not None:
             problems.append(f"{path}: cannot resolve use/redirect target from supplied variables")
         visiting.remove(path)
