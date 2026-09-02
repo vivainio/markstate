@@ -29,7 +29,8 @@ from markstate.config import (
     find_flow_target,
     find_flow_target_best_effort,
     has_use,
-    resolve_glob_reference,
+    resolve_reference,
+    resolve_reference_candidates,
 )
 from markstate.config import _find as _find_flow
 from markstate.engine import TaskNotFoundError, TransitionError
@@ -1397,10 +1398,20 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
             problems.append(f"cannot resolve redirect target from supplied variables in {path}")
             break
         if redirect:
-            target = resolve_glob_reference(path, redirect)
-            chain_lines.append(f"    redirect → {target}")
+            candidates = resolve_reference_candidates(path, redirect)
+            target = resolve_reference(path, redirect)
+            if len(candidates) > 1:
+                for c in candidates:
+                    mark = " ✓" if c == target and c.exists() else ""
+                    chain_lines.append(f"    redirect candidate: {c}{mark}")
+            else:
+                chain_lines.append(f"    redirect → {target}")
             if not target.exists():
-                problems.append(f"redirect target missing: {target} (from {path})")
+                if len(candidates) > 1:
+                    tried = ", ".join(str(c) for c in candidates)
+                    problems.append(f"redirect target missing: tried {tried} (from {path})")
+                else:
+                    problems.append(f"redirect target missing: {target} (from {path})")
                 break
             path = target
             continue
@@ -1412,12 +1423,24 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
             if use_raw is None:
                 problems.append(f"cannot resolve use target from supplied variables in {path}")
                 break
-            use_path = resolve_glob_reference(path, use_raw)
-            chain_lines.append(
-                f"    use: {use_raw} → {use_path}{_link_note(use_path)}{_age_suffix(use_path)}"
-            )
+            candidates = resolve_reference_candidates(path, use_raw)
+            use_path = resolve_reference(path, use_raw)
+            if len(candidates) > 1:
+                for c in candidates:
+                    mark = " ✓" if c == use_path and c.exists() else ""
+                    chain_lines.append(
+                        f"    use candidate: {c}{_link_note(c)}{_age_suffix(c)}{mark}"
+                    )
+            else:
+                chain_lines.append(
+                    f"    use: {use_raw} → {use_path}{_link_note(use_path)}{_age_suffix(use_path)}"
+                )
             if not use_path.exists():
-                problems.append(f"use target missing: {use_path} (from {path})")
+                if len(candidates) > 1:
+                    tried = ", ".join(str(c) for c in candidates)
+                    problems.append(f"use target missing: tried {tried} (from {path})")
+                else:
+                    problems.append(f"use target missing: {use_path} (from {path})")
         break
 
     print("flow chain:")

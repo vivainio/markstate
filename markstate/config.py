@@ -78,6 +78,49 @@ def resolve_glob_reference(flow_path: Path, reference: str) -> Path:
     return max(matches, key=lambda p: _natural_sort_key(str(p)))
 
 
+def resolve_reference_candidates(flow_path: Path, reference: str | list[Any]) -> list[Path]:
+    """Resolve a ``use:``/``redirect:`` reference to its candidate paths.
+
+    *reference* is either a single path (see ``resolve_glob_reference``) or a
+    list of candidate paths -- e.g. one install location per source (a
+    Claude Code plugin cache, a manually installed skill under
+    ``~/.claude/skills``) -- each resolved the same way. The list is
+    returned in the given order; picking a winner is the caller's job.
+    """
+    items = reference if isinstance(reference, list) else [reference]
+    return [resolve_glob_reference(flow_path, str(item)) for item in items]
+
+
+def resolve_reference(flow_path: Path, reference: str | list[Any]) -> Path:
+    """Resolve a ``use:``/``redirect:`` reference to one concrete path: the
+    first candidate that exists, or the last candidate if none do (so a
+    caller that just checks ``.exists()`` still gets something sensible to
+    report)."""
+    candidates = resolve_reference_candidates(flow_path, reference)
+    return next((c for c in candidates if c.exists()), candidates[-1])
+
+
+def _resolve_required_reference(
+    flow_path: Path, reference: str | list[Any], directive: str
+) -> Path:
+    """Resolve a ``use:``/``redirect:`` reference, raising ``FlowConfigError``
+    if no candidate exists. The first existing candidate wins; with a list
+    reference, all resolved candidates are named in the error when none
+    exist. *directive* (``"use"`` or ``"redirect"``) labels the error."""
+    candidates = resolve_reference_candidates(flow_path, reference)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    if len(candidates) > 1:
+        tried = ", ".join(str(c) for c in candidates)
+        raise FlowConfigError(
+            f"none of the {directive} candidates were found (referenced from {flow_path}): {tried}"
+        )
+    raise FlowConfigError(
+        f"{directive} target not found: {candidates[0]} (referenced from {flow_path})"
+    )
+
+
 def _main_worktree_anchor(parent: Path) -> Path | None:
     """If ``parent`` is inside a linked git worktree, return the equivalent
     directory under the main working tree; otherwise None."""
@@ -309,10 +352,7 @@ def find_flow_target(start: Path | None = None, variables: dict[str, str] | None
         if not redirect:
             _validate_variable_names(overrides, known)
             return path
-        target = resolve_glob_reference(path, redirect)
-        if not target.exists():
-            raise FlowConfigError(f"redirect target not found: {target} (referenced from {path})")
-        path = target
+        path = _resolve_required_reference(path, redirect, "redirect")
 
 
 def find_flow_target_best_effort(
@@ -350,7 +390,7 @@ def find_flow_target_best_effort(
         redirect = raw.get("redirect")
         if not redirect:
             return path
-        target = resolve_glob_reference(path, redirect)
+        target = resolve_reference(path, redirect)
         if not target.exists():
             return path
         path = target
@@ -377,18 +417,14 @@ def _load(path: Path, variables: dict[str, str], known: set[str]) -> FlowConfig:
         raise FlowConfigError(f"flow must be a mapping: {path}")
     raw = _resolve_selects(loaded, variables, path, known)
     if "redirect" in raw:
-        target = resolve_glob_reference(path, raw["redirect"])
-        if not target.exists():
-            raise FlowConfigError(f"redirect target not found: {target} (referenced from {path})")
+        target = _resolve_required_reference(path, raw["redirect"], "redirect")
         return _load(target, variables, known)
 
     config_dir = path.parent
     hook_dirs: tuple[Path, ...] = (config_dir,)
 
     if "use" in raw:
-        use_path = resolve_glob_reference(path, raw["use"])
-        if not use_path.exists():
-            raise FlowConfigError(f"use target not found: {use_path} (referenced from {path})")
+        use_path = _resolve_required_reference(path, raw["use"], "use")
         loaded_base = yaml.safe_load(use_path.read_text(encoding="utf-8")) or {}
         if not isinstance(loaded_base, dict):
             raise FlowConfigError(f"flow must be a mapping: {use_path}")

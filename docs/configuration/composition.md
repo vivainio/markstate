@@ -66,6 +66,26 @@ plain `use:` path that doesn't exist.
 
 `redirect:` (below) accepts the same wildcards and version-aware selection.
 
+### Try several locations with a list
+
+A flow might come from different places in different environments — say a
+skill installed via a Claude Code plugin in one setup, and the same skill
+installed manually under `~/.claude/skills` in another. `use:` (and
+`redirect:`) accepts a list of candidates instead of a single path; the
+first one that exists wins:
+
+```yaml
+use:
+  - ~/.claude/plugins/cache/<marketplace>/<plugin>/*/skills/<skill>/resources/flow.yml
+  - ~/.claude/skills/<skill>/resources/flow.yml
+```
+
+Each entry may itself use a glob wildcard, as above. Candidates are tried
+top to bottom and the first *existing* one is used — later entries are
+never preferred over earlier ones, even if both exist. If none of the
+candidates exist, markstate reports every path it tried. `markstate doctor`
+lists each candidate it considered and marks the one it picked.
+
 ## Hooks
 
 A `flow_hooks.py` file beside a `flow.yml` can observe and veto transitions.
@@ -122,7 +142,9 @@ flow. Relative paths are resolved from the file containing `redirect`.
 
 Like `use:`, `redirect:` accepts glob wildcards and resolves a
 version-numbered match to the newest one — see
-[Match a version-numbered install with a wildcard](#match-a-version-numbered-install-with-a-wildcard).
+[Match a version-numbered install with a wildcard](#match-a-version-numbered-install-with-a-wildcard)
+— and also accepts a list of candidates tried in order, see
+[Try several locations with a list](#try-several-locations-with-a-list).
 
 ## Scope phases to directory trees
 

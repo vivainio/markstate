@@ -819,6 +819,72 @@ def test_use_glob_no_match_raises(tmp_path):
         find_and_load(project)
 
 
+def test_use_list_picks_first_existing_candidate(tmp_path):
+    """use: as a list tries candidates in order and picks the first that exists."""
+    second = tmp_path / "second-location"
+    resources = second / "resources"
+    resources.mkdir(parents=True)
+    (resources / "flow.yml").write_text("status_field: from-second\nphases: []\ntransitions: []\n")
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text(
+        "use:\n"
+        "  - ../first-location/resources/flow.yml\n"
+        "  - ../second-location/resources/flow.yml\n"
+    )
+
+    cfg = find_and_load(project)
+    assert cfg.status_field == "from-second"
+
+
+def test_use_list_first_candidate_wins_when_both_exist(tmp_path):
+    """use: as a list prefers earlier entries over later ones."""
+    for name, value in (("first-location", "from-first"), ("second-location", "from-second")):
+        resources = tmp_path / name / "resources"
+        resources.mkdir(parents=True)
+        (resources / "flow.yml").write_text(f"status_field: {value}\nphases: []\ntransitions: []\n")
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text(
+        "use:\n"
+        "  - ../first-location/resources/flow.yml\n"
+        "  - ../second-location/resources/flow.yml\n"
+    )
+
+    cfg = find_and_load(project)
+    assert cfg.status_field == "from-first"
+
+
+def test_use_list_no_candidate_exists_raises_with_all_tried(tmp_path):
+    """use: as a list reports every candidate it tried when none exist."""
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "flow.yml").write_text(
+        "use:\n  - ../first-location/flow.yml\n  - ../second-location/flow.yml\n"
+    )
+
+    with pytest.raises(FlowConfigError, match="none of the use candidates were found"):
+        find_and_load(project)
+
+
+def test_redirect_list_picks_first_existing_candidate(tmp_path):
+    """redirect: as a list behaves the same as use: (first existing wins)."""
+    fallback = tmp_path / "fallback-repo"
+    fallback.mkdir()
+    (fallback / "flow.yml").write_text("status_field: from-fallback\nphases: []\ntransitions: []\n")
+
+    source_repo = tmp_path / "source-repo"
+    source_repo.mkdir()
+    (source_repo / "flow.yml").write_text(
+        "redirect:\n  - ../primary-repo/flow.yml\n  - ../fallback-repo/flow.yml\n"
+    )
+
+    cfg = find_and_load(source_repo)
+    assert cfg.status_field == "from-fallback"
+
+
 def test_use_local_status_field_overrides(tmp_path):
     """Local status_field takes precedence over imported one."""
     shared = tmp_path / "shared"

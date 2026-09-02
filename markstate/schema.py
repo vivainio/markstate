@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from markstate.config import CONFIG_FILENAME, HIDDEN_CONFIG_PATH, resolve_glob_reference
+from markstate.config import CONFIG_FILENAME, HIDDEN_CONFIG_PATH, resolve_reference
 
 SCHEMA_VERSION = "v1"
 
@@ -65,7 +65,7 @@ def discover_flow_chain(
         reference = loaded.get("redirect") or loaded.get("use")
         target = _selected_reference(reference, loaded.get("$variables"), overrides)
         if target is not None:
-            visit(resolve_glob_reference(path, target))
+            visit(resolve_reference(path, target))
         elif reference is not None:
             problems.append(f"{path}: cannot resolve use/redirect target from supplied variables")
         visiting.remove(path)
@@ -74,9 +74,19 @@ def discover_flow_chain(
     return paths, problems
 
 
-def _selected_reference(reference: Any, definitions: Any, overrides: dict[str, str]) -> str | None:
+def _selected_reference(
+    reference: Any, definitions: Any, overrides: dict[str, str]
+) -> str | list[str] | None:
+    """Resolve a raw ``use:``/``redirect:`` value to what it points at:
+    a plain path, a list of candidate paths, or a ``$select``/``cases``
+    expression resolved against *overrides* -- or None if it can't be
+    resolved with what's known so far."""
     if isinstance(reference, str):
         return reference
+    if isinstance(reference, list):
+        resolved = [_selected_reference(item, definitions, overrides) for item in reference]
+        strings = [item for item in resolved if isinstance(item, str)]
+        return strings or None
     if not isinstance(reference, dict):
         return None
     name = reference.get("$select")
