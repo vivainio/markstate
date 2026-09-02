@@ -147,6 +147,20 @@ def test_validate_recursively_checks_every_used_flow(tmp_path: Path) -> None:
     assert f"{base}: phases.0" in result.stderr
 
 
+def test_validate_recursively_checks_use_list(tmp_path: Path) -> None:
+    """A use: list is followed to the first existing candidate."""
+    project = tmp_path / "flow.yml"
+    base = tmp_path / "base.yml"
+    missing = tmp_path / "missing.yml"
+    project.write_text(f"use:\n  - {missing}\n  - {base}\n")
+    base.write_text("phases:\n  - description: Missing name\n")
+
+    result = run(["validate"], tmp_path, validation_env(tmp_path))
+
+    assert result.returncode == 1
+    assert f"{base}: phases.0" in result.stderr
+
+
 def test_validate_reports_use_cycle(tmp_path: Path) -> None:
     (tmp_path / "flow.yml").write_text("use: shared.yml\n")
     (tmp_path / "shared.yml").write_text("use: flow.yml\n")
@@ -1197,3 +1211,60 @@ def test_doctor_follows_redirect_chain(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "redirect →" in result.stdout
     assert str(docs / "flow.yml") in result.stdout
+
+
+def test_doctor_shows_use_list_candidates_and_marks_winner(tmp_path):
+    """A use: list is reported one candidate per line, with the picked one marked."""
+    base = tmp_path / "base.yml"
+    base.write_text(SIMPLE_FLOW)
+    missing = tmp_path / "missing.yml"
+    (tmp_path / "flow.yml").write_text(f"use:\n  - {missing}\n  - {base}\n")
+
+    result = run(["doctor"], tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"use candidate: {missing}" in result.stdout
+    assert f"use candidate: {base} ✓" in result.stdout
+
+
+def test_doctor_reports_all_tried_when_use_list_has_no_match(tmp_path):
+    """When no use: list candidate exists, doctor names every one it tried."""
+    first = tmp_path / "first.yml"
+    second = tmp_path / "second.yml"
+    (tmp_path / "flow.yml").write_text(f"use:\n  - {first}\n  - {second}\n")
+
+    result = run(["doctor"], tmp_path)
+
+    assert result.returncode == 1
+    assert "use target missing: tried" in result.stdout
+    assert str(first) in result.stdout
+    assert str(second) in result.stdout
+
+
+def test_doctor_shows_redirect_list_candidates_and_marks_winner(tmp_path):
+    """A redirect: list is reported one candidate per line, with the picked one marked."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "flow.yml").write_text(SIMPLE_FLOW)
+    missing = tmp_path / "missing.yml"
+    (tmp_path / "flow.yml").write_text(f"redirect:\n  - {missing}\n  - {docs / 'flow.yml'}\n")
+
+    result = run(["doctor"], tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"redirect candidate: {missing}" in result.stdout
+    assert f"redirect candidate: {docs / 'flow.yml'} ✓" in result.stdout
+
+
+def test_doctor_reports_all_tried_when_redirect_list_has_no_match(tmp_path):
+    """When no redirect: list candidate exists, doctor names every one it tried."""
+    first = tmp_path / "first.yml"
+    second = tmp_path / "second.yml"
+    (tmp_path / "flow.yml").write_text(f"redirect:\n  - {first}\n  - {second}\n")
+
+    result = run(["doctor"], tmp_path)
+
+    assert result.returncode == 1
+    assert "redirect target missing: tried" in result.stdout
+    assert str(first) in result.stdout
+    assert str(second) in result.stdout
