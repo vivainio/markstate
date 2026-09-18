@@ -78,7 +78,9 @@ def resolve_magic(value: str) -> str | date | datetime:
         if override:
             return override
         try:
-            result = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True)
+            result = subprocess.run(
+                ["git", "config", "user.name"], capture_output=True, text=True, encoding="utf-8"
+            )
         except FileNotFoundError:
             raise TransitionError(
                 "Cannot resolve 'me': git not found on PATH. "

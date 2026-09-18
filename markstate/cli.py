@@ -589,6 +589,7 @@ def _audit_user(config: FlowConfig) -> tuple[str, str]:
             ["git", "-C", str(config.root), "config", "user.email"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=2,
         )
