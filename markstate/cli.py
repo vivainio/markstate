@@ -2,6 +2,7 @@
 
 import argparse
 import difflib
+import io
 import json
 import os
 import re
@@ -1761,7 +1762,7 @@ def main() -> None:
     # crashing with a UnicodeEncodeError. Force UTF-8 and replace anything that
     # still can't be encoded rather than raising.
     for _stream in (sys.stdout, sys.stderr):
-        if hasattr(_stream, "reconfigure"):
+        if isinstance(_stream, io.TextIOWrapper):
             try:
                 _stream.reconfigure(encoding="utf-8", errors="replace")
             except (ValueError, OSError):
