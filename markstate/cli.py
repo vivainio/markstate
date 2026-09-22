@@ -1418,9 +1418,7 @@ def _cmd_doctor(args: argparse.Namespace) -> None:
             continue
         final = path
         if "use" in raw:
-            use_raw = _selected_reference(
-                raw["use"], raw.get("$variables"), _variable_overrides
-            )
+            use_raw = _selected_reference(raw["use"], raw.get("$variables"), _variable_overrides)
             if use_raw is None:
                 problems.append(f"cannot resolve use target from supplied variables in {path}")
                 break
@@ -1758,6 +1756,16 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
 
 def main() -> None:
     global _focus_override, _variable_overrides, _env_cli_overrides
+    # Windows consoles often default to a legacy codepage (e.g. cp1252) that can't
+    # encode characters like the arrows this CLI prints throughout its output,
+    # crashing with a UnicodeEncodeError. Force UTF-8 and replace anything that
+    # still can't be encoded rather than raising.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            try:
+                _stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
     bootstrap = argparse.ArgumentParser(add_help=False)
     bootstrap.add_argument("-D", "--variable", action="append", default=[])
     bootstrap_args, _ = bootstrap.parse_known_args()
@@ -1783,9 +1791,7 @@ def main() -> None:
     _variable_overrides.update(_env_cli_overrides)
 
     # Diagnostic commands need to run even when flow.yml is broken.
-    is_diagnostic = any(
-        command in sys.argv[1:] for command in ("doctor", "validate", "vars")
-    )
+    is_diagnostic = any(command in sys.argv[1:] for command in ("doctor", "validate", "vars"))
     try:
         config = None if is_diagnostic else _try_load_config()
     except SystemExit:
