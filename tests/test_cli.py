@@ -8,6 +8,10 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
+from markstate import frontmatter
+
 
 def run(
     args: list[str], cwd: Path, env: dict[str, str] | None = None
@@ -526,8 +530,7 @@ def _setup_flow_with_skill_variable(tmp_path: Path) -> None:
         "$variables:\n"
         "  skill:\n"
         "    values: [myflow, bas-spec]\n"
-        "    default: myflow\n"
-        + SIMPLE_FLOW,
+        "    default: myflow\n" + SIMPLE_FLOW,
     )
 
 
@@ -1268,3 +1271,114 @@ def test_doctor_reports_all_tried_when_redirect_list_has_no_match(tmp_path):
     assert "redirect target missing: tried" in result.stdout
     assert str(first) in result.stdout
     assert str(second) in result.stdout
+
+
+VERSIONED_FLOW = """\
+phases:
+  - name: drafting
+    produces:
+      - dir: changes/<change>
+        version: 2
+        version_file: proposal.md
+        files:
+          - file: proposal.md
+            template: "---\\nstatus: draft\\n---\\n# Proposal\\n"
+          - file: analysis.md
+            since: 2
+            template: "---\\nstatus: draft\\n---\\n# Analysis\\n"
+
+transitions: []
+"""
+
+
+def test_new_stamps_version_and_creates_since_files(tmp_path: Path) -> None:
+    setup_flow(tmp_path, VERSIONED_FLOW)
+    assert run(["new", "changes/add-x"], tmp_path).returncode == 0
+    proposal = tmp_path / "changes/add-x/proposal.md"
+    assert frontmatter.load(proposal).get("flow-version") == 2
+    assert (tmp_path / "changes/add-x/analysis.md").exists()
+    assert frontmatter.load(tmp_path / "changes/add-x/analysis.md").get("flow-version") is None
+
+
+def test_since_file_not_offered_for_legacy_item(tmp_path: Path) -> None:
+    setup_flow(tmp_path, VERSIONED_FLOW)
+    legacy = tmp_path / "changes/old"
+    legacy.mkdir(parents=True)
+    (legacy / "proposal.md").write_text("---\nstatus: accepted\n---\n# Proposal\n")
+
+    result = run(["next"], legacy)
+    assert "analysis.md" not in result.stdout
+
+    result = run(["new", "analysis.md"], legacy)
+    assert result.returncode != 0
+    assert not (legacy / "analysis.md").exists()
+
+
+def test_since_file_offered_once_item_is_upgraded(tmp_path: Path) -> None:
+    setup_flow(tmp_path, VERSIONED_FLOW)
+    item = tmp_path / "changes/old"
+    item.mkdir(parents=True)
+    (item / "proposal.md").write_text("---\nstatus: draft\nflow-version: 2\n---\n# P\n")
+    assert run(["new", "analysis.md"], item).returncode == 0
+    assert (item / "analysis.md").exists()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        ("version: 2\n        version_file: proposal.md", "version: 2"),
+        ("version_file: proposal.md", "version_file: nope.md"),
+        ("since: 2", "since: 3"),
+    ],
+)
+def test_invalid_version_config_is_rejected(tmp_path: Path, mutation: tuple[str, str]) -> None:
+    setup_flow(tmp_path, VERSIONED_FLOW.replace(*mutation))
+    result = run(["status"], tmp_path)
+    assert result.returncode != 0
+
+
+GATED_FLOW = VERSIONED_FLOW.replace(
+    "transitions: []",
+    """\
+    advance_when:
+      - file: proposal.md
+        status: accepted
+      - file: analysis.md
+        status: accepted
+
+  - name: building
+    gates:
+      - file: proposal.md
+        status: accepted
+    advance_when:
+      - file: build.md
+        status: done
+
+transitions: []""",
+)
+
+
+def _phase_of(item: Path) -> str:
+    return json.loads(run(["status", "--json"], item).stdout)["current_phase"]
+
+
+def test_since_file_does_not_block_advancement_of_older_items(tmp_path: Path) -> None:
+    setup_flow(tmp_path, GATED_FLOW)
+    legacy = tmp_path / "changes/old"
+    legacy.mkdir(parents=True)
+    (legacy / "proposal.md").write_text("---\nstatus: accepted\n---\n# P\n")
+    assert _phase_of(legacy) == "building"
+
+    current = tmp_path / "changes/new"
+    current.mkdir()
+    (current / "proposal.md").write_text("---\nstatus: accepted\nflow-version: 2\n---\n# P\n")
+    assert _phase_of(current) == "drafting"
+
+
+def test_item_without_version_file_but_with_docs_is_legacy(tmp_path: Path) -> None:
+    setup_flow(tmp_path, GATED_FLOW)
+    odd = tmp_path / "changes/odd"
+    odd.mkdir(parents=True)
+    (odd / "notes.md").write_text("# notes\n")
+    result = run(["next"], odd)
+    assert "analysis.md" not in result.stdout

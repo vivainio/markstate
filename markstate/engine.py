@@ -69,6 +69,64 @@ class StatusResult(TypedDict):
 
 
 _ONCE_PREFIX = "once-"
+VERSION_FIELD = "flow-version"
+
+
+def dir_version(config: FlowConfig, dir_pattern: str) -> tuple[int, str] | None:
+    """Return (version, version_file) declared for a dir pattern, if any."""
+    version: int | None = None
+    version_file: str | None = None
+    for phase in config.phases:
+        for entry in phase.produces:
+            if isinstance(entry, ProducedDir) and entry.dir == dir_pattern:
+                if entry.version is not None:
+                    version = entry.version
+                if entry.version_file is not None:
+                    version_file = entry.version_file
+    if version is None or version_file is None:
+        return None
+    return version, version_file
+
+
+def item_version(config: FlowConfig, directory: Path, dir_pattern: str) -> int | None:
+    """Return the flow-version of the item in directory, None if its type is unversioned.
+
+    An item with no docs yet is brand new (current version). Docs without a
+    stamped version file predate versioning (0).
+    """
+    declared = dir_version(config, dir_pattern)
+    if declared is None:
+        return None
+    current, version_file = declared
+    path = directory / version_file
+    if not path.exists():
+        has_docs = directory.is_dir() and any(directory.glob("*.md"))
+        return 0 if has_docs else current
+    stamped = frontmatter.load(path).get(VERSION_FIELD)
+    return stamped if isinstance(stamped, int) and not isinstance(stamped, bool) else 0
+
+
+def stamp_version(config: FlowConfig, path: Path, dir_pattern: str) -> None:
+    """Write the current flow-version into path if it is the dir's version file."""
+    declared = dir_version(config, dir_pattern)
+    if declared is None or path.name != declared[1]:
+        return
+    doc = frontmatter.load(path)
+    doc.first_keys = (config.status_field,)
+    if doc.get(VERSION_FIELD) is None:
+        doc.set(VERSION_FIELD, declared[0])
+        doc.save()
+
+
+def applicable_dir_files(
+    config: FlowConfig, directory: Path, dir_pattern: str
+) -> list[ProducedDoc]:
+    """Files of a dir template that apply to the item in directory (honours `since`)."""
+    files = collect_dir_files(config, dir_pattern)
+    version = item_version(config, directory, dir_pattern)
+    if version is None:
+        return files
+    return [f for f in files if f.since is None or f.since <= version]
 
 
 def resolve_magic(value: str) -> str | date | datetime:
@@ -268,7 +326,7 @@ def next_transitions(config: FlowConfig, directory: Path) -> list[NextTransition
     # Show missing files from the current dir template (if inside one)
     _, dir_entry = find_dir_template(config, directory)
     if dir_entry:
-        all_files = collect_dir_files(config, dir_entry.dir)
+        all_files = applicable_dir_files(config, directory, dir_entry.dir)
         for f in all_files:
             if not (directory / f.file).exists():
                 results.append(
@@ -347,7 +405,26 @@ def _status_matches(actual: str, expected: str | list[str]) -> bool:
     return actual == expected
 
 
+def _not_yet_applicable(condition: Condition, config: FlowConfig, directory: Path) -> bool:
+    """True if the condition names a file that only exists `since` a newer item version."""
+    if condition.file is None:
+        return False
+    _, entry = find_dir_template(config, directory)
+    if entry is None:
+        return False
+    version = item_version(config, directory, entry.dir)
+    if version is None:
+        return False
+    return any(
+        f.file == condition.file and f.since is not None and f.since > version
+        for f in collect_dir_files(config, entry.dir)
+    )
+
+
 def _evaluate(condition: Condition, config: FlowConfig, directory: Path) -> bool:
+    if _not_yet_applicable(condition, config, directory):
+        return True
+
     if condition.file is not None and condition.status is not None:
         path = directory / condition.file
         if not path.exists():

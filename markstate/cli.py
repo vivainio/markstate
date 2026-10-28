@@ -454,7 +454,8 @@ def _cmd_new(args: argparse.Namespace) -> None:
 
     if dir_entry and "/" not in args.file:
         # Bare filename inside a dir template: create file in cwd
-        all_files = {f.file: f for f in engine.collect_dir_files(config, dir_entry.dir)}
+        applicable = engine.applicable_dir_files(config, cwd, dir_entry.dir)
+        all_files = {f.file: f for f in applicable}
         produced = all_files.get(args.file)
         if produced is None:
             available = list(all_files.keys())
@@ -466,6 +467,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
             sys.exit(1)
         target = cwd / args.file
         _write_doc(produced, target, args.force, config.status_field)
+        engine.stamp_version(config, target, dir_entry.dir)
         _apply_frontmatter_edits(target, extra, extra_unset, config.status_field)
         return
 
@@ -504,6 +506,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
                 if isinstance(entry, ProducedDir) and rel.match(entry.glob_pattern):
                     _write_dir_files(entry.files, resolved, args.force)
                     for f in entry.files:
+                        engine.stamp_version(config, resolved / f.file, entry.dir)
                         _apply_frontmatter_edits(
                             resolved / f.file, extra, extra_unset, config.status_field
                         )
@@ -567,13 +570,17 @@ def _create_auto_docs(phase: Phase, config: FlowConfig, directory: Path) -> None
                     continue
                 if not existing_dir.is_relative_to(directory):
                     continue
+                applicable = {
+                    f.file for f in engine.applicable_dir_files(config, existing_dir, entry.dir)
+                }
                 for f in entry.files:
-                    if not f.auto or f.template is None:
+                    if not f.auto or f.template is None or f.file not in applicable:
                         continue
                     dest = existing_dir / f.file
                     if not dest.exists():
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_text(f.template, encoding="utf-8")
+                        engine.stamp_version(config, dest, entry.dir)
                         _apply_frontmatter_edits(
                             dest, f.set_fields, f.unset_fields, config.status_field
                         )
@@ -1544,7 +1551,7 @@ def _new_metavar(config: FlowConfig | None) -> str:
     cwd = Path.cwd()
     _, dir_entry = engine.find_dir_template(config, cwd)
     if dir_entry:
-        all_files = engine.collect_dir_files(config, dir_entry.dir)
+        all_files = engine.applicable_dir_files(config, cwd, dir_entry.dir)
         missing = [f.file for f in all_files if not (cwd / f.file).exists()]
         return "[" + "|".join(missing) + "]" if missing else "FILE"
     items = []

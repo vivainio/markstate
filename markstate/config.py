@@ -195,12 +195,15 @@ class ProducedDoc:
     auto: bool = False
     set_fields: dict[str, str] = field(default_factory=dict)
     unset_fields: list[str] = field(default_factory=list)
+    since: int | None = None  # only expected for items at flow-version >= since
 
 
 @dataclass
 class ProducedDir:
     dir: str
     files: list[ProducedDoc] = field(default_factory=list)
+    version: int | None = None  # current flow-version for items of this type
+    version_file: str | None = None  # produced doc that carries the item's flow-version
 
     @property
     def glob_pattern(self) -> str:
@@ -439,6 +442,7 @@ def _load(path: Path, variables: dict[str, str], known: set[str]) -> FlowConfig:
         merged = raw
 
     phases = [_parse_phase(cast(dict[str, Any], p)) for p in merged.get("phases", [])]
+    _validate_versions(phases, path)
     transitions = [
         _parse_transition(cast(dict[str, Any], t)) for t in merged.get("transitions", [])
     ]
@@ -575,6 +579,7 @@ def _parse_produced_doc(raw: str | dict) -> ProducedDoc:
         auto=raw.get("auto", False),
         set_fields=dict(raw.get("set") or {}),
         unset_fields=list(raw.get("unset") or []),
+        since=raw.get("since"),
     )
 
 
@@ -582,7 +587,55 @@ def _parse_produced_dir(raw: dict) -> ProducedDir:
     return ProducedDir(
         dir=raw["dir"],
         files=[_parse_produced_doc(f) for f in raw.get("files", [])],
+        version=raw.get("version"),
+        version_file=raw.get("version_file"),
     )
+
+
+def _validate_versions(phases: list[Phase], path: Path) -> None:
+    """Check version/version_file/since consistency across produced dirs."""
+    by_dir: dict[str, list[ProducedDir]] = {}
+    for phase in phases:
+        for entry in phase.produces:
+            if isinstance(entry, ProducedDir):
+                by_dir.setdefault(entry.dir, []).append(entry)
+            elif entry.since is not None:
+                raise FlowConfigError(
+                    f"{path}: 'since' on '{entry.file}' requires a dir entry with 'version'"
+                )
+    for pattern, entries in by_dir.items():
+        versions = {e.version for e in entries if e.version is not None}
+        version_files = {e.version_file for e in entries if e.version_file is not None}
+        if len(versions) > 1 or len(version_files) > 1:
+            raise FlowConfigError(f"{path}: conflicting version/version_file for dir '{pattern}'")
+        version = next(iter(versions), None)
+        version_file = next(iter(version_files), None)
+        if (version is None) != (version_file is None):
+            raise FlowConfigError(
+                f"{path}: dir '{pattern}' needs both 'version' and 'version_file'"
+            )
+        names = {f.file for e in entries for f in e.files}
+        if version_file is not None and version_file not in names:
+            raise FlowConfigError(
+                f"{path}: version_file '{version_file}' is not a file of dir '{pattern}'"
+            )
+        for e in entries:
+            for f in e.files:
+                if f.since is None:
+                    continue
+                if f.file == version_file:
+                    raise FlowConfigError(
+                        f"{path}: version_file '{f.file}' of dir '{pattern}' cannot have 'since'"
+                    )
+                if version is None:
+                    raise FlowConfigError(
+                        f"{path}: 'since' on '{f.file}' requires 'version' on dir '{pattern}'"
+                    )
+                if not isinstance(f.since, int) or not 0 <= f.since <= version:
+                    raise FlowConfigError(
+                        f"{path}: 'since' on '{f.file}' must be an integer "
+                        f"between 0 and the dir version ({version})"
+                    )
 
 
 def _parse_transition(raw: dict) -> Transition:

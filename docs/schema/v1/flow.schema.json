@@ -157,6 +157,11 @@
             "file": { "type": "string", "minLength": 1 },
             "template": { "type": "string" },
             "auto": { "type": "boolean", "default": false },
+            "since": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Only expected for items whose flow-version is at least this value."
+            },
             "primary": {
               "type": "boolean",
               "description": "Optional metadata marking the principal produced document."
@@ -177,6 +182,16 @@
       "required": ["dir"],
       "properties": {
         "dir": { "type": "string", "minLength": 1 },
+        "version": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current flow-version stamped into new items of this type."
+        },
+        "version_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Produced file whose front matter carries the item's flow-version."
+        },
         "files": {
           "type": "array",
           "items": { "$ref": "#/$defs/producedFile" }

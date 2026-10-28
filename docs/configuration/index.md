@@ -69,6 +69,34 @@ produces:
         template: "# Tasks\n\n- [ ]"
 ```
 
+### Versioning produced files
+
+Adding a file to a directory template would otherwise make every existing item
+look incomplete. Give the template a `version` and a `version_file`, and mark
+newer files with `since`:
+
+```yaml
+produces:
+  - dir: changes/<change>
+    version: 2
+    version_file: proposal.md
+    files:
+      - file: proposal.md
+        template: "..."
+      - file: analysis.md   # added in version 2
+        since: 2
+        template: "..."
+```
+
+- `markstate new` stamps `flow-version: <version>` into the `version_file`.
+- An item's version is the `flow-version` in its `version_file`. A file without
+  the field is version 0; a missing file means a new item at the current version.
+- Files with `since` above the item's version are not listed as missing, not
+  offered by `markstate new`, and not auto-created.
+- To adopt the newer files, set `flow-version` in that file by hand.
+- `version` and `version_file` go together, `version_file` must be one of the
+  dir's files, and `since` cannot exceed `version`.
+
 ## Conditions
 
 Conditions use one of these forms:
