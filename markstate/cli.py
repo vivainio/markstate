@@ -1276,6 +1276,49 @@ def _cmd_list(args: argparse.Namespace) -> None:
             print(f"📁 {label}")
 
 
+def _format_age(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
+        if seconds >= size:
+            return f"{seconds // size}{unit} ago"
+    return "just now"
+
+
+def _cmd_recent(args: argparse.Namespace) -> None:
+    config = _load_config()
+    root = config.docs_root
+    scope = root
+    if not args.all_dirs:
+        cwd = Path.cwd().resolve()
+        if cwd.is_relative_to(root.resolve()):
+            scope = cwd
+    newest: dict[Path, float] = {}
+    for md in filtered_rglob(scope, "*.md", config.exclude_dirs):
+        if not md.is_file():
+            continue
+        d = md.parent
+        newest[d] = max(newest.get(d, 0.0), md.stat().st_mtime)
+    if not newest:
+        print("(no directories with documents)")
+        return
+
+    ranked = sorted(newest, key=lambda d: newest[d], reverse=True)
+    if args.limit > 0:
+        ranked = ranked[: args.limit]
+    now = datetime.now().timestamp()
+    rows = []
+    for d in ranked:
+        phase = engine.current_phase(config, d)
+        icon = _phase_icon(phase.name) if phase else None
+        rel = str(d.relative_to(root)) if d != root else "."
+        rows.append((icon or "📄", rel, _format_age(now - newest[d]), phase.name if phase else ""))
+    name_w = max(len(r[1]) for r in rows)
+    age_w = max(len(r[2]) for r in rows)
+    for icon, rel, age, phase_name in rows:
+        suffix = f"  [{phase_name}]" if phase_name else ""
+        print(f"{icon} {rel:{name_w}s}  {age:>{age_w}s}{suffix}")
+
+
 def _cmd_audit(args: argparse.Namespace) -> None:
     config = _load_config()
     log_dir = config.root / ".markstate"
@@ -1711,6 +1754,19 @@ def _build_parser(config: FlowConfig | None) -> argparse.ArgumentParser:
     # list
     sub.add_parser("list", help="List directories that contain markdown documents.")
 
+    # recent
+    p = sub.add_parser("recent", help="List directories by most recently updated documents.")
+    p.add_argument(
+        "-a",
+        "--all",
+        dest="all_dirs",
+        action="store_true",
+        help="Search the whole docs root instead of only the current directory",
+    )
+    p.add_argument(
+        "-n", "--limit", type=int, default=10, help="Max directories to show (0 = all; default 10)"
+    )
+
     # audit
     p = sub.add_parser("audit", help="Show merged transition audit log across users.")
     p.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
@@ -1836,6 +1892,7 @@ def main() -> None:
         "check": _cmd_check,
         "query": _cmd_query,
         "list": _cmd_list,
+        "recent": _cmd_recent,
         "audit": _cmd_audit,
         "install-skills": _cmd_install_skills,
         "doctor": _cmd_doctor,

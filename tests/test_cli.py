@@ -1273,6 +1273,31 @@ def test_doctor_reports_all_tried_when_redirect_list_has_no_match(tmp_path):
     assert str(second) in result.stdout
 
 
+def test_recent_orders_by_mtime_and_limits(tmp_path: Path) -> None:
+    (tmp_path / "flow.yml").write_text(SIMPLE_FLOW)
+    for name, age in (("old", 5000), ("new", 10), ("mid", 400)):
+        d = tmp_path / "docs" / name
+        d.mkdir(parents=True)
+        f = d / "spec.md"
+        f.write_text("---\nstatus: draft\n---\n")
+        t = datetime.now().timestamp() - age
+        os.utime(f, (t, t))
+    result = run(["recent"], tmp_path)
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.strip().splitlines()
+    assert [next(w for w in ln.split() if w.startswith("docs/")) for ln in lines] == [
+        "docs/new",
+        "docs/mid",
+        "docs/old",
+    ]
+    scoped = run(["recent"], tmp_path / "docs" / "mid")
+    assert scoped.stdout.strip().splitlines()[0].split()[1] == "docs/mid"
+    assert len(scoped.stdout.strip().splitlines()) == 1
+    assert len(run(["recent", "--all"], tmp_path / "docs" / "mid").stdout.splitlines()) == 3
+    limited = run(["recent", "-n", "1"], tmp_path)
+    assert len(limited.stdout.strip().splitlines()) == 1
+
+
 VERSIONED_FLOW = """\
 phases:
   - name: drafting

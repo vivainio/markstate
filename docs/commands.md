@@ -168,6 +168,19 @@ List directories containing Markdown documents:
 markstate list
 ```
 
+## `recent`
+
+List directories ordered by their most recently modified document, newest first:
+
+```bash
+markstate recent
+markstate recent -n 3
+markstate recent -n 0   # no limit
+markstate recent --all  # whole docs root, even from a subdirectory
+```
+
+When run from inside a subdirectory of the docs root, only that subtree is searched.
+
 ## `audit`
 
 Show the merged transition audit log across users:
