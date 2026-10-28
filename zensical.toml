@@ -13,6 +13,7 @@ nav = [
   { "Command reference" = "commands.md" },
   { "Configuration" = [
     { "Flow files" = "configuration/index.md" },
+    { "Versioning flows" = "configuration/versioning.md" },
     { "Variables and selection" = "configuration/variables.md" },
     { "Shared and scoped flows" = "configuration/composition.md" },
   ] },
